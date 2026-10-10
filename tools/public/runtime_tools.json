@@ -1,0 +1,70 @@
+{
+  "linux-x86_64": {
+    "target": "x86_64-linux-gnu.2.31",
+    "python": {
+      "filename": "cpython-3.11.17+20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+      "sha256": "89db7607ebadb77a64709d159b86555d995368ec385a2ab33b00477790c543b0",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "version": "3.11.17+20261009"
+    },
+    "zig": {
+      "filename": "zig-x86_64-linux-0.17.0.tar.xz",
+      "url": "https://ziglang.org/download/0.17.0/zig-x86_64-linux-0.17.0.tar.xz",
+      "sha256": "1cbe9df9f27e6b78d14ccbca43b6703a404ef79ef1c463de901d7f088d4e2026",
+      "source": "https://ziglang.org",
+      "version": "0.17.0"
+    }
+  },
+  "windows-x86_64": {
+    "target": "x86_64-windows-gnu",
+    "python": {
+      "filename": "cpython-3.11.17+20261009-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+      "sha256": "c3045115465bb4aa7d1ca6bfe6ce311ba157d726d768bbb3520fad2580831c3f",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "version": "3.11.17+20261009"
+    },
+    "zig": {
+      "filename": "zig-x86_64-windows-0.17.0.zip",
+      "url": "https://ziglang.org/download/0.17.0/zig-x86_64-windows-0.17.0.zip",
+      "sha256": "b5663f69581dcf391293fbf16c06cb80d81d806545ce618b4d0bab7f0eb8c428",
+      "source": "https://ziglang.org",
+      "version": "0.17.0"
+    }
+  },
+  "macos-arm64": {
+    "target": "aarch64-macos",
+    "python": {
+      "filename": "cpython-3.11.17+20261009-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-aarch64-apple-darwin-install_only_stripped.tar.gz",
+      "sha256": "f58d38af4680fbf9f89c329e732b7cca1bd06ff7a93884798b27d541bee138f6",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "version": "3.11.17+20261009"
+    },
+    "zig": {
+      "filename": "zig-aarch64-macos-0.17.0.tar.xz",
+      "url": "https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz",
+      "sha256": "b607e9b9234790a008116ae5bdb71c6243b84b9fb42a53a9e70fde41c06c536a",
+      "source": "https://ziglang.org",
+      "version": "0.17.0"
+    }
+  },
+  "macos-x86_64": {
+    "target": "x86_64-macos",
+    "python": {
+      "filename": "cpython-3.11.17+20261009-x86_64-apple-darwin-install_only_stripped.tar.gz",
+      "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.11.17%2B20261009-x86_64-apple-darwin-install_only_stripped.tar.gz",
+      "sha256": "af19b09f79e784b912ac8b2c659805ac26eb5b8c7dc793151ea4dd2e3456f023",
+      "source": "https://github.com/astral-sh/python-build-standalone",
+      "version": "3.11.17+20261009"
+    },
+    "zig": {
+      "filename": "zig-x86_64-macos-0.17.0.tar.xz",
+      "url": "https://ziglang.org/download/0.17.0/zig-x86_64-macos-0.17.0.tar.xz",
+      "sha256": "4f9a1c5269aa17ebda5e6d3c2b89d6cbf36f7d2b22a0306e9ab98f25f95529c6",
+      "source": "https://ziglang.org",
+      "version": "0.17.0"
+    }
+  }
+}
