@@ -1,6 +1,5 @@
 """Verify a bundled native compiler with synthetic C; never needs a ROM."""
 import argparse
-import ctypes
 from pathlib import Path
 import platform
 import subprocess
@@ -16,5 +15,8 @@ with tempfile.TemporaryDirectory(prefix='synthetic-native-') as name:
     exports=['-Wl,--export-all-symbols'] if platform.system()=='Windows' else []
     subprocess.run([*native_compiler(a.resources),mode,'-fPIC',*exports,str(source),'-o',str(output)],check=True)
     if platform.system()=='Darwin':subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(output)],check=True)
-    library=ctypes.CDLL(str(output));assert library.public_toolchain_contract()==42
+    # A separate process releases the DLL before Windows removes the fixture.
+    subprocess.run([sys.executable,'-c',
+        'import ctypes,sys; library=ctypes.CDLL(sys.argv[1]); assert library.public_toolchain_contract()==42',
+        str(output)],check=True)
 print('Bundled Python + native compiler contract: OK')
