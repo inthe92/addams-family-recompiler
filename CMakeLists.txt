@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(nes_native_lab VERSION 0.2.0 LANGUAGES C CXX)
+# Keep filesystem UTF-8 paths as std::string, including on newer GCC defaults.
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 if(APPLE)
   enable_language(OBJC OBJCXX)
 endif()
