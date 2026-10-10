@@ -1,0 +1,128 @@
+name: Build content-free frontends
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Audit source export
+        run: python3 -B tools/public/audit_public.py .
+      - name: Build engine without ROM
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 3
+          ctest --test-dir build --output-on-failure
+      - name: Bundle verified local importer tools
+        run: |
+          if [ "$(uname -m)" = "arm64" ]; then TARGET=macos-arm64; else TARGET=macos-x86_64; fi
+          python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system "$TARGET"
+          mkdir -p /tmp/nes-smoke
+          cp -R tools /tmp/nes-smoke/tools
+          cp -R runtime-tools /tmp/nes-smoke/toolchain
+          runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
+      - name: Package frontend without imported content
+        run: python3 -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ matrix.os }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-cmake
+            mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-python
+      - name: Audit source export
+        run: python -B tools/public/audit_public.py .
+      - name: Build engine without ROM
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4
+          ctest --test-dir build --output-on-failure
+      - name: Bundle verified local importer tools
+        run: |
+          python -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
+          mkdir -p smoke
+          cp -R tools smoke/tools
+          cp -R runtime-tools smoke/toolchain
+          runtime-tools/python/python.exe -B tests/public_toolchain_smoke.py smoke
+      - name: Package portable frontend
+        run: python -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-windows-x86_64
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install build and desktop dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ python3 libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxinerama-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+      - name: Audit source export
+        run: python3 -B tools/public/audit_public.py .
+      - name: Build engine without ROM
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 4
+          ctest --test-dir build --output-on-failure
+      - name: Bundle verified local importer tools
+        run: |
+          python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system linux-x86_64
+          mkdir -p /tmp/nes-smoke
+          cp -R tools /tmp/nes-smoke/tools
+          cp -R runtime-tools /tmp/nes-smoke/toolchain
+          runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
+      - name: Download official packaging tools
+        run: |
+          mkdir -p /tmp/nes-packaging
+          curl --fail --location https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage -o /tmp/nes-packaging/linuxdeploy
+          curl --fail --location https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage -o /tmp/nes-packaging/appimagetool
+          chmod +x /tmp/nes-packaging/linuxdeploy /tmp/nes-packaging/appimagetool
+          sha256sum /tmp/nes-packaging/* > packaging-tools-sha256.txt
+      - name: Generate AppImage
+        env:
+          LINUXDEPLOY: /tmp/nes-packaging/linuxdeploy
+          APPIMAGETOOL: /tmp/nes-packaging/appimagetool
+          ARCH: x86_64
+        run: sh tools/public/package_linux.sh build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-linux-x86_64-AppImage
+          path: |
+            dist/*.AppImage
+            packaging-tools-sha256.txt
+          if-no-files-found: error
