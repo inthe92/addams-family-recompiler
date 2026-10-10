@@ -35,6 +35,7 @@ jobs:
           cp -R tools /tmp/nes-smoke/tools
           cp -R runtime-tools /tmp/nes-smoke/toolchain
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
+          runtime-tools/python/bin/python3 -B tests/public_import_process_checks.py /tmp/nes-smoke build/import_probe
       - name: Package frontend without imported content
         run: python3 -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
       - uses: actions/upload-artifact@v4
@@ -73,6 +74,7 @@ jobs:
           cp -R tools smoke/tools
           cp -R runtime-tools smoke/toolchain
           runtime-tools/python/python.exe -B tests/public_toolchain_smoke.py smoke
+          runtime-tools/python/python.exe -B tests/public_import_process_checks.py smoke build/import_probe.exe
       - name: Package portable frontend
         run: python -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
       - uses: actions/upload-artifact@v4
@@ -106,6 +108,7 @@ jobs:
           cp -R tools /tmp/nes-smoke/tools
           cp -R runtime-tools /tmp/nes-smoke/toolchain
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
+          runtime-tools/python/bin/python3 -B tests/public_import_process_checks.py /tmp/nes-smoke build/import_probe
       - name: Download official packaging tools
         run: |
           mkdir -p /tmp/nes-packaging

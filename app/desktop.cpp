@@ -25,7 +25,7 @@ struct Controller {SDL_GameController* value{};~Controller(){if(value)SDL_GameCo
 static void show_error(const std::string& message) {
     std::cerr << message << '\n';
 #ifdef NES_ALPHA_BUILD
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Addams Family — Alpha 0.2",
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Addams Family — Alpha 0.2.1",
         ("La alfa se ha detenido.\n\n" + message +
          "\n\nEsta version es parcial; el juego completo sigue en desarrollo.").c_str(), nullptr);
 #endif
@@ -72,7 +72,7 @@ int main(int argc,char** argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
     const char* title="The Addams Family — Native";
 #ifdef NES_ALPHA_BUILD
-    title="Addams Family — Alpha 0.2 · GOD activo · G: cambiar · Enter: empezar · Z/X";
+    title="Addams Family — Alpha 0.2.1 · GOD activo · G: cambiar · Enter: empezar · Z/X";
 #endif
     auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,540,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
     if(!window)throw std::runtime_error(SDL_GetError());GLContext context{SDL_GL_CreateContext(window.get())};
@@ -89,7 +89,7 @@ int main(int argc,char** argv) {
     const auto update_title=[&]{
         const std::string caption=std::string("Addams Family — ")+
 #ifdef NES_ALPHA_BUILD
-            "Alpha 0.2 · "+
+            "Alpha 0.2.1 · "+
 #else
             "Native · "+
 #endif

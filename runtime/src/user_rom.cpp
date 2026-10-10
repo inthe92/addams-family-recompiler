@@ -10,14 +10,17 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cerrno>
+#include <cstring>
 #ifdef _WIN32
 #include <windows.h>
 #include <commdlg.h>
-#include <process.h>
 #include <codecvt>
 #include <locale>
 #else
 #include <spawn.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <sys/wait.h>
 extern char** environ;
 #endif
@@ -37,23 +40,71 @@ const GameWorldEdit* imported_level13_edits=nullptr;
 namespace nes::runtime {
 namespace {
 namespace fs=std::filesystem;
-int run_python(const std::vector<std::string>& arguments) {
+int run_python(const std::vector<std::string>& arguments,const fs::path& log) {
+#ifdef _WIN32
+    // CreateProcess takes a command line, not argv. Quote each argument using
+    // the Windows CRT rules, including backslashes before quotes and at the end.
+    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
+    std::wstring command;
+    for(const auto& item:arguments) {
+        if(!command.empty())command+=L' ';
+        command+=L'"';size_t slashes=0;
+        for(wchar_t ch:converter.from_bytes(item)) {
+            if(ch==L'\\'){++slashes;continue;}
+            command.append(ch==L'"'?slashes*2+1:slashes,L'\\');
+            command+=ch;slashes=0;
+        }
+        command.append(slashes*2,L'\\');command+=L'"';
+    }
+    SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};
+    HANDLE output=CreateFileW(log.c_str(),GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,
+        &security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(output==INVALID_HANDLE_VALUE)throw std::runtime_error("No se puede crear el registro: "+log.u8string());
+    const auto failed=[&](DWORD error) {
+        const std::string message="Python launch failed (Windows error "+std::to_string(error)+").\n";
+        DWORD written=0;WriteFile(output,message.data(),static_cast<DWORD>(message.size()),&written,nullptr);
+        CloseHandle(output);return -1;
+    };
+    HANDLE input=CreateFileW(L"NUL",GENERIC_READ,FILE_SHARE_READ|FILE_SHARE_WRITE,
+        &security,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,nullptr);
+    if(input==INVALID_HANDLE_VALUE)return failed(GetLastError());
+    STARTUPINFOW startup{};startup.cb=sizeof(startup);startup.dwFlags=STARTF_USESTDHANDLES;
+    startup.hStdInput=input;startup.hStdOutput=output;startup.hStdError=output;
+    PROCESS_INFORMATION process{};
+    // No shell is involved. A null application name permits PATH lookup for
+    // developer builds; the packaged executable path is quoted in argv[0].
+    const BOOL launched=CreateProcessW(nullptr,command.data(),nullptr,nullptr,TRUE,
+        CREATE_NO_WINDOW,nullptr,nullptr,&startup,&process);
+    const DWORD error=launched?ERROR_SUCCESS:GetLastError();CloseHandle(input);
+    if(!launched)return failed(error);
+    DWORD exit_code=1;
+    const DWORD waited=WaitForSingleObject(process.hProcess,INFINITE);
+    const BOOL exited=waited==WAIT_OBJECT_0&&GetExitCodeProcess(process.hProcess,&exit_code);
+    const DWORD wait_error=exited?ERROR_SUCCESS:GetLastError();
+    CloseHandle(process.hThread);CloseHandle(process.hProcess);
+    if(!exited)return failed(wait_error);
+    CloseHandle(output);return static_cast<int>(exit_code);
+#else
     std::vector<const char*> args;
     for(const auto& item:arguments)args.push_back(item.c_str());args.push_back(nullptr);
-#ifdef _WIN32
-    // argv spawning avoids shell interpretation of spaces and metacharacters.
-    std::wstring_convert<std::codecvt_utf8_utf16<wchar_t>> converter;
-    std::vector<std::wstring> wide;
-    for(const auto& item:arguments)wide.push_back(converter.from_bytes(item));
-    std::vector<const wchar_t*> pointers;
-    for(const auto& item:wide)pointers.push_back(item.c_str());pointers.push_back(nullptr);
-    return static_cast<int>(_wspawnvp(_P_WAIT,pointers[0],pointers.data()));
-#else
-    pid_t child=0;
-    const int error=posix_spawnp(&child,args[0],nullptr,nullptr,const_cast<char**>(args.data()),environ);
-    if(error)return -1;
-    int status=0;if(waitpid(child,&status,0)<0)return -1;
-    return WIFEXITED(status)?WEXITSTATUS(status):-1;
+    // Capture output before Python loads its script, so startup/argument errors
+    // are also visible. The child owns the log; Python must not reopen it.
+    posix_spawn_file_actions_t actions;
+    int error=posix_spawn_file_actions_init(&actions);
+    if(!error) {
+        error=posix_spawn_file_actions_addopen(&actions,STDOUT_FILENO,log.c_str(),O_WRONLY|O_CREAT|O_TRUNC,0600);
+        if(!error)error=posix_spawn_file_actions_adddup2(&actions,STDOUT_FILENO,STDERR_FILENO);
+        pid_t child=0;
+        if(!error)error=posix_spawnp(&child,args[0],&actions,nullptr,const_cast<char**>(args.data()),environ);
+        posix_spawn_file_actions_destroy(&actions);
+        if(!error) {
+            int status=0;pid_t waited;
+            do{waited=waitpid(child,&status,0);}while(waited<0&&errno==EINTR);
+            if(waited>=0)return WIFEXITED(status)?WEXITSTATUS(status):-1;
+            error=errno;
+        }
+    }
+    std::ofstream(log)<<"Python launch failed: "<<std::strerror(error)<<'\n';return -1;
 #endif
 }
 std::string choose_rom() {
@@ -134,8 +185,8 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
     const fs::path bundled_python=resource_root/"toolchain/python/bin/python3";
 #endif
     if(fs::is_regular_file(bundled_python))python=bundled_python.u8string();
-    auto task=std::async(std::launch::async,[&]{return run_python({python,"-B",(tools/"import_user_rom.py").u8string(),
-        "--rom",fs::absolute(rom).u8string(),"--cache",fs::absolute(cache).u8string(),"--log",log.u8string()});});
+    auto task=std::async(std::launch::async,[&]{return run_python({python,"-u","-X","utf8","-B",(tools/"import_user_rom.py").u8string(),
+        "--rom",fs::absolute(rom).u8string(),"--cache",fs::absolute(cache).u8string()},log);});
     SDL_Window* progress=nullptr;
     if(interactive&&!import_only&&SDL_Init(SDL_INIT_VIDEO)==0) {
         progress=SDL_CreateWindow("Importando ROM... primera compilacion: varios minutos",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,180,0);
@@ -144,7 +195,8 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
     while(task.wait_for(std::chrono::milliseconds(25))!=std::future_status::ready) {
         if(progress){SDL_Event event{};while(SDL_PollEvent(&event)){};SDL_UpdateWindowSurface(progress);}
     }
-    const int result=task.get();if(progress){SDL_DestroyWindow(progress);SDL_Quit();}
+    if(progress){SDL_DestroyWindow(progress);SDL_Quit();}
+    const int result=task.get();
     if(result!=0) {
         std::ifstream input(log);std::string details((std::istreambuf_iterator<char>(input)),{});
         if(details.size()>2500)details=details.substr(details.size()-2500);

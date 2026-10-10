@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(nes_native_lab VERSION 0.2.0 LANGUAGES C CXX)
+project(nes_native_lab VERSION 0.2.1 LANGUAGES C CXX)
 # Keep filesystem UTF-8 paths as std::string, including on newer GCC defaults.
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,8 +44,8 @@ target_link_libraries(nes_native PRIVATE user_rom desktop_presenter)
 target_compile_definitions(nes_native PRIVATE NES_ALPHA_BUILD=1 SDL_MAIN_HANDLED=1)
 set_target_properties(nes_native PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "NES Native Lab"
   MACOSX_BUNDLE_GUI_IDENTIFIER "org.nes-native-lab.preview"
-  MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2.0"
-  MACOSX_BUNDLE_BUNDLE_VERSION "0.2.0")
+  MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2.1"
+  MACOSX_BUNDLE_BUNDLE_VERSION "0.2.1")
 if(WIN32)
   # Both SDL and the C++ runtime are static in the MinGW portable build.
   target_link_options(nes_native PRIVATE -static -static-libgcc -static-libstdc++)

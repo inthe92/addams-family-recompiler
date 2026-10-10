@@ -4,7 +4,7 @@
 
 Experimental native recompilation of the European NES game, using a compatible ROM supplied by the user. The repository and downloadable applications include **no game ROM, translated game code, graphics, music, extracted maps or disassembly**. The application is currently called **NES Native Lab**.
 
-**Technical alpha 0.2.0.** The game is not fully rewritten or verified from start to finish. Widescreen enemy activation and fixed-width/vertical rooms still have visible limitations.
+**Technical alpha 0.2.1.** The game is not fully rewritten or verified from start to finish. Widescreen enemy activation and fixed-width/vertical rooms still have visible limitations.
 
 ## Download and run
 
@@ -17,6 +17,12 @@ Download the package for your system from [Releases](https://github.com/inthe92/
 | Linux / Steam Deck | `NES-Native-Lab-Linux-x86_64.AppImage` | Mark executable; drag your ROM into the import window, or use `--rom`. |
 
 macOS builds use an ad hoc signature and are not notarized. Windows builds have no Authenticode signature. Hardware testing on Windows and Steam Deck is pending; please report your system and import log if it fails. macOS Intel builds are configured in GitHub Actions and are not part of the first locally built release.
+
+### If import fails
+
+Alpha 0.2.1 fixes launching Python from Windows paths containing spaces. The frontend records stdout and stderr from process startup, including failures before Python or its tools initialize. Extract the entire ZIP into a new folder and keep `tools` and `toolchain` beside the executable.
+
+The error dialog shows the cause and the location of `import.log`. On Windows this is normally `%APPDATA%\nes-native-lab\user-import\import.log`. A SHA-256 mismatch means the input is not the compatible revision listed below.
 
 ### Steam Deck
 

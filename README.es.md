@@ -4,7 +4,7 @@
 
 Recompilación nativa experimental del juego europeo de NES, con una ROM compatible aportada por cada usuario. El repositorio y las aplicaciones descargables **no incluyen la ROM, código traducido del juego, gráficos, música, mapas extraídos ni desensamblados**. La aplicación se llama actualmente **NES Native Lab**.
 
-**Alfa técnica 0.2.0.** El juego todavía no está reescrito por completo ni verificado de principio a fin. El panorámico sigue teniendo limitaciones visibles con la aparición de enemigos y las habitaciones verticales o de ancho fijo.
+**Alfa técnica 0.2.1.** El juego todavía no está reescrito por completo ni verificado de principio a fin. El panorámico sigue teniendo limitaciones visibles con la aparición de enemigos y las habitaciones verticales o de ancho fijo.
 
 ## Descargar y abrir
 
@@ -17,6 +17,12 @@ Descarga el paquete de tu sistema desde [Releases](https://github.com/inthe92/ad
 | Linux / Steam Deck | `NES-Native-Lab-Linux-x86_64.AppImage` | Dale permiso de ejecución y arrastra la ROM a la ventana de importación, o usa `--rom`. |
 
 macOS lleva firma ad hoc, sin notarización. Windows no tiene firma Authenticode. Falta probar los paquetes en equipos reales de Windows y Steam Deck; si fallan, indica tu sistema y adjunta sólo el registro de importación. Las compilaciones para Mac Intel están configuradas en GitHub Actions y no forman parte de la primera entrega compilada localmente.
+
+### Si falla la importación
+
+La alfa 0.2.1 corrige el lanzamiento de Python con rutas que contienen espacios en Windows. El lanzador guarda la salida y los errores desde el arranque, incluso si Python o sus herramientas no llegan a iniciarse. Extrae el ZIP completo en una carpeta nueva y conserva `tools` y `toolchain` junto al ejecutable.
+
+El cuadro de error muestra la causa y la ubicación de `import.log`. En Windows se encuentra normalmente en `%APPDATA%\nes-native-lab\user-import\import.log`. Si el registro indica un SHA-256 distinto, la ROM no es la revisión compatible indicada abajo.
 
 ### Steam Deck
 
