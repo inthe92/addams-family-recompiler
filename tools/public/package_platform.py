@@ -29,7 +29,12 @@ def validate_macos_deployment(app,minimum,arch):
         native=(head[:4] in [b'\xcf\xfa\xed\xfe',b'\xce\xfa\xed\xfe'] and int.from_bytes(head[12:16],'little') in [2,6,8])
         fat=head[:4] in [b'\xca\xfe\xba\xbe',b'\xbe\xba\xfe\xca']
         if not (native or fat):continue
-        subprocess.run(['/usr/bin/lipo','-verify_arch',arch,str(binary)],check=True,capture_output=True)
+        # Apple's lipo treats every argument after -verify_arch as an arch.
+        try:
+            subprocess.run(['/usr/bin/lipo',str(binary),'-verify_arch',arch],check=True,capture_output=True,text=True)
+        except subprocess.CalledProcessError as error:
+            raise ValueError('lipo architecture verification failed ('+str(error.returncode)+') for '
+                +str(binary.relative_to(app))+'; expected '+arch+'; stderr: '+(error.stderr.strip() or '(empty)')) from error
         text=subprocess.check_output(['/usr/bin/xcrun','vtool','-arch',arch,'-show-build',str(binary)],text=True)
         match=re.search(r'^\s+minos\s+(\d+\.\d+(?:\.\d+)?)\s*$',text,re.MULTILINE)
         if not match and 'LC_VERSION_MIN_MACOSX' in text:

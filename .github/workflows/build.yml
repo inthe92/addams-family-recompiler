@@ -62,6 +62,7 @@ jobs:
           cp -R runtime-tools /tmp/nes-smoke/toolchain
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
           runtime-tools/python/bin/python3 -B tests/public_import_process_checks.py /tmp/nes-smoke build/import_probe
+          python3 -B tests/macos_lipo_checks.py
       - name: Package frontend without imported content
         id: package
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
