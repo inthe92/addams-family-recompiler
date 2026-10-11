@@ -25,13 +25,17 @@ jobs:
         with:
           python-version: '3.11'
       - name: Audit source export
+        id: source_audit
         run: python3 -B tools/public/audit_public.py .
       - name: Build engine without ROM
+        id: build
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }} -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0
           cmake --build build --parallel 3
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
           python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+      - name: Run complete CTest suite
+        run: |
           ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
@@ -47,6 +51,9 @@ jobs:
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
+        id: toolchain
+        # A02 remains a failing gate; independent package checks still run.
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
         run: |
           if [ "$(uname -m)" = "arm64" ]; then TARGET=macos-arm64; else TARGET=macos-x86_64; fi
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system "$TARGET"
@@ -56,8 +63,25 @@ jobs:
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
           runtime-tools/python/bin/python3 -B tests/public_import_process_checks.py /tmp/nes-smoke build/import_probe
       - name: Package frontend without imported content
-        run: python3 -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
+        id: package
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
+        shell: bash
+        run: python3 -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools 2>&1 | tee build/macos-package.log
+      - name: Verify extracted package on native macOS 15
+        id: package_checks
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: python3 -B tests/macos_package_checks.py --build build --output dist --arch ${{ matrix.arch }} --report build/macos-package-verification.json --require-native-macos15
+      - name: Preserve package verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-package-verification-${{ matrix.arch }}
+          path: |
+            build/macos-package.log
+            build/macos-package-verification.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
           name: frontend-${{ matrix.os }}
           path: dist/*.zip

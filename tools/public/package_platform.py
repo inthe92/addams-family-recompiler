@@ -6,12 +6,41 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
 import tempfile
 import zipfile
 
 ROOT=Path(__file__).resolve().parents[2]
+
+def macos_deployment_target(build):
+    cache=(build/'CMakeCache.txt').read_text()
+    match=re.search(r'^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]+=(\d+\.\d+(?:\.\d+)?)\s*$',cache,re.MULTILINE)
+    if not match:raise ValueError('Configure an explicit CMAKE_OSX_DEPLOYMENT_TARGET before packaging')
+    return match.group(1)
+
+def validate_macos_deployment(app,minimum,arch):
+    def version(value):return tuple(int(part) for part in value.split('.'))+(0,)*(3-len(value.split('.')))
+    checked=0
+    for binary in sorted(app.rglob('*')):
+        if not binary.is_file() or binary.is_symlink():continue
+        with binary.open('rb') as handle:head=handle.read(16)
+        native=(head[:4] in [b'\xcf\xfa\xed\xfe',b'\xce\xfa\xed\xfe'] and int.from_bytes(head[12:16],'little') in [2,6,8])
+        fat=head[:4] in [b'\xca\xfe\xba\xbe',b'\xbe\xba\xfe\xca']
+        if not (native or fat):continue
+        subprocess.run(['/usr/bin/lipo','-verify_arch',arch,str(binary)],check=True,capture_output=True)
+        text=subprocess.check_output(['/usr/bin/xcrun','vtool','-arch',arch,'-show-build',str(binary)],text=True)
+        match=re.search(r'^\s+minos\s+(\d+\.\d+(?:\.\d+)?)\s*$',text,re.MULTILINE)
+        if not match and 'LC_VERSION_MIN_MACOSX' in text:
+            match=re.search(r'^\s+version\s+(\d+\.\d+(?:\.\d+)?)\s*$',text,re.MULTILINE)
+        if not match or ('LC_BUILD_VERSION' in text and not re.search(r'^\s+platform\s+MACOS\s*$',text,re.MULTILINE)):
+            raise ValueError('Missing macOS deployment command: '+str(binary.relative_to(app)))
+        if version(match.group(1))>version(minimum):
+            raise ValueError('macOS '+match.group(1)+' required above package floor '+minimum+': '+str(binary.relative_to(app)))
+        checked+=1
+    if not checked:raise ValueError('No native macOS binaries found in package')
+    print('Verified macOS deployment:',minimum,arch,checked,'native binaries')
 
 def copy_resources(destination,toolchain):
     for relative in ['tools/recompiler','include','game/include','docs']:
@@ -36,13 +65,17 @@ def package(build,output,toolchain,system=None,arch=None):
     if target!=expected:raise ValueError('Bundled runtime architecture mismatch')
     output.mkdir(parents=True,exist_ok=True)
     if system=='Darwin':
+        minimum=macos_deployment_target(build)
         with tempfile.TemporaryDirectory(prefix='nes-public-',dir='/private/tmp') as temp:
             app=Path(temp)/'NES Native Lab.app'
             subprocess.run(['/usr/bin/ditto','--norsrc','--noextattr','--noqtn','--noacl',str(build/'nes_native.app'),str(app)],check=True)
             copy_resources(app/'Contents/Resources',toolchain)
             info=app/'Contents/Info.plist';data=plistlib.loads(info.read_bytes())
-            data.update(CFBundleName='NES Native Lab',CFBundleDisplayName='NES Native Lab',NSHighResolutionCapable=True)
+            data.update(CFBundleName='NES Native Lab',CFBundleDisplayName='NES Native Lab',NSHighResolutionCapable=True,
+                LSMinimumSystemVersion=minimum)
             info.write_bytes(plistlib.dumps(data))
+            # Check the frontend and all nested Python/Zig libraries, not SDK versions.
+            validate_macos_deployment(app,minimum,arch)
             subprocess.run(['/usr/bin/xattr','-cr',str(app)],check=True)
             # Sign nested Python libraries and compiler executables before the app.
             for binary in sorted(app.rglob('*'),key=lambda p:len(p.parts),reverse=True):

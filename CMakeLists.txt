@@ -1,4 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
+# Set before project() so every Apple language/dependency uses the same floor.
+# The pinned Zig importer requires macOS 15; other platforms ignore this cache.
+if(CMAKE_HOST_APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+  set(CMAKE_OSX_DEPLOYMENT_TARGET "15.0" CACHE STRING "Minimum macOS deployment version" FORCE)
+endif()
 project(nes_native_lab VERSION 0.2.1 LANGUAGES C CXX)
 # Keep filesystem UTF-8 paths as std::string, including on newer GCC defaults.
 set(CMAKE_CXX_STANDARD 17)
