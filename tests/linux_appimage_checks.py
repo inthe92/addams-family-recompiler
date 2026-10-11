@@ -54,7 +54,7 @@ def verify(args, report):
         report['extraction'] = 'PASS (appimage-extract; direct mode recorded separately)'
         members = [p.relative_to(extracted).as_posix() for p in extracted.rglob('*') if p.is_file()]
         report['member_count'] = len(members)
-        required = ['AppRun', 'usr/bin/nes_native', 'usr/bin/tools/recompiler/module_abi.h',
+        required = ['AppRun', 'usr/bin/nes_native', 'usr/bin/include/recomp/module_abi.h',
                     'usr/bin/toolchain/python/bin/python3', 'usr/bin/toolchain/zig/zig',
                     'usr/bin/LICENSE', 'usr/bin/THIRD_PARTY.md']
         for item in required:
