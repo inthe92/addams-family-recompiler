@@ -216,7 +216,9 @@ def package_processes(resources):
                 try:
                     buffer = ctypes.create_unicode_buffer(32768); size = w.DWORD(len(buffer))
                     if kernel.QueryFullProcessImageNameW(handle, 0, buffer, ctypes.byref(size)):
-                        if Path(buffer.value).resolve().is_relative_to(resources):
+                        # The checker itself runs with packaged Python. It is
+                        # a harness process, not an application/import worker.
+                        if entry.pid != os.getpid() and Path(buffer.value).resolve().is_relative_to(resources):
                             processes.append(dict(pid=entry.pid, exe=buffer.value))
                 finally:
                     kernel.CloseHandle(handle)
