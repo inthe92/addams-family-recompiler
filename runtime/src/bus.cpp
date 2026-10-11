@@ -4,7 +4,7 @@
 namespace nes::runtime {
 RuntimeServices Bus::services() {
     return RuntimeServices{this,
-        [](void* context, uint16_t a) { return static_cast<Bus*>(context)->read8(a); },
+        [](void* context, uint16_t a, uint8_t offset) { return static_cast<Bus*>(context)->read8(a, offset); },
         [](void* context, uint16_t a, uint8_t v, uint8_t offset) { static_cast<Bus*>(context)->write8(a, v, offset); },
         [](void* context, uint16_t a) { return static_cast<Bus*>(context)->cartridge_.bank_for_pc(a); },
         [](void* context, uint8_t cycles) { static_cast<Bus*>(context)->advance(cycles); },
@@ -20,7 +20,8 @@ void Bus::sync_devices(uint64_t target) {
 uint8_t Bus::read8(uint16_t address) {
     if (address < 0x2000) open_bus_ = ram_.read(address);
     else if (address < 0x4000) open_bus_ = video_.read_register(address);
-    else if (address == 0x4015) open_bus_ = audio_.read_status(open_bus_);
+    // $4015 is internal to the CPU and does not drive the external data bus.
+    else if (address == 0x4015) return audio_.read_status(open_bus_);
     else if (address == 0x4016 || address == 0x4017) {
         const unsigned port = address & 1u;
         const uint8_t value = strobe_ ? buttons_[port] : controller_shift_[port];
@@ -28,6 +29,10 @@ uint8_t Bus::read8(uint16_t address) {
         if (!strobe_) controller_shift_[port] = static_cast<uint8_t>((controller_shift_[port] >> 1) | 0x80u);
     } else if (address >= 0x6000) open_bus_ = cartridge_.cpu_read(address, open_bus_);
     return open_bus_;
+}
+uint8_t Bus::read8(uint16_t address, uint8_t offset) {
+    sync_devices(cycles_ + offset);
+    return read8(address);
 }
 void Bus::write8(uint16_t address, uint8_t value, uint8_t offset) {
     const uint64_t when = cycles_ + offset;
@@ -79,7 +84,7 @@ void Bus::deliver_interrupt(CPUState& cpu, uint16_t vector) {
     write8(static_cast<uint16_t>(0x0100u | cpu.SP), static_cast<uint8_t>(cpu.PC), 3); --cpu.SP;
     write8(static_cast<uint16_t>(0x0100u | cpu.SP), cpu_status_for_push(&cpu, 0), 4); --cpu.SP;
     cpu_set_flag(&cpu, CPU_I, 1);
-    const uint8_t low = read8(vector), high = read8(static_cast<uint16_t>(vector + 1u));
+    const uint8_t low = read8(vector, 5), high = read8(static_cast<uint16_t>(vector + 1u), 6);
     cpu.PC = static_cast<uint16_t>(low | (static_cast<uint16_t>(high) << 8));
     advance(7);
 }

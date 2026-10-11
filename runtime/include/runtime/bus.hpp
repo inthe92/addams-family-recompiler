@@ -15,6 +15,7 @@ public:
     explicit Bus(CartridgeData data) : cartridge_(data), video_(cartridge_) {}
     RuntimeServices services();
     uint8_t read8(uint16_t address);
+    uint8_t read8(uint16_t address, uint8_t cycle_offset);
     void write8(uint16_t address, uint8_t value, uint8_t cycle_offset = 0);
     void advance(uint64_t cycles);
     uint8_t boundary(CPUState& cpu, uint8_t irq_mask = 0xFF);

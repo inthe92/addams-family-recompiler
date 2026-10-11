@@ -61,7 +61,7 @@ private:
     uint16_t dmc_divider_{}, dmc_current_address_{0xC000}, dmc_remaining_{};
     uint8_t dmc_buffer_{}, dmc_shift_{}, dmc_bits_{8}, dmc_start_delay_{};
     bool dmc_buffer_full_{}, dmc_silence_{true}, dmc_request_{}, dmc_irq_{};
-    uint8_t frame_control_{}, frame_reset_delay_{};
+    uint8_t frame_control_{}, frame_pending_mode_{}, frame_reset_delay_{};
     uint32_t frame_cycle_{};
     bool frame_irq_{};
     uint64_t cycles_{}, produced_samples_{}, dropped_samples_{}, sample_accumulator_{};

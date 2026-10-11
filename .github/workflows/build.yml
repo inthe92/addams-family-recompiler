@@ -13,7 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-15-intel]
+        include:
+          - os: macos-15
+            arch: arm64
+          - os: macos-15-intel
+            arch: x86_64
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -24,9 +28,22 @@ jobs:
         run: python3 -B tools/public/audit_public.py .
       - name: Build engine without ROM
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON -DCMAKE_OSX_ARCHITECTURES=${{ matrix.arch }}
           cmake --build build --parallel 3
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
+          python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit build/ctest-results.xml
+          python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Preserve test verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-${{ matrix.os }}
+          path: |
+            build/ctest-inventory.json
+            build/ctest-results.xml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
       - name: Bundle verified local importer tools
         run: |
           if [ "$(uname -m)" = "arm64" ]; then TARGET=macos-arm64; else TARGET=macos-x86_64; fi
@@ -64,9 +81,22 @@ jobs:
         run: python -B tools/public/audit_public.py .
       - name: Build engine without ROM
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
           cmake --build build --parallel 4
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
+          python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit build/ctest-results.xml
+          python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Preserve test verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-windows-x64
+          path: |
+            build/ctest-inventory.json
+            build/ctest-results.xml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
       - name: Bundle verified local importer tools
         run: |
           python -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
@@ -98,9 +128,22 @@ jobs:
         run: python3 -B tools/public/audit_public.py .
       - name: Build engine without ROM
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
           cmake --build build --parallel 4
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
+          python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit build/ctest-results.xml
+          python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Preserve test verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ctest-linux-x64
+          path: |
+            build/ctest-inventory.json
+            build/ctest-results.xml
+            build/Testing/Temporary/LastTest.log
+          if-no-files-found: warn
       - name: Bundle verified local importer tools
         run: |
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system linux-x86_64

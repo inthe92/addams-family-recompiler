@@ -59,18 +59,20 @@ def emit_address(name,mode,value):
     if mode in ['abs','zp']:result.append(f'uint16_t address = {literal};')
     elif mode in ['zpx','zpy']:
         register='X' if mode=='zpx' else 'Y'
-        result += [f'(void)recomp_read8(s, {literal});',f'uint16_t address = (uint8_t)({literal} + cpu->{register});']
+        result += [f'(void)recomp_read8(s, {literal}, 2);',f'uint16_t address = (uint8_t)({literal} + cpu->{register});']
     elif mode=='izx':
-        result += [f'(void)recomp_read8(s, {literal});',f'uint16_t address = recomp_read16_zp(s, (uint8_t)({literal} + cpu->X));']
+        result += [f'(void)recomp_read8(s, {literal}, 2);',f'uint16_t address = recomp_read16_zp(s, (uint8_t)({literal} + cpu->X), 3);']
     elif mode in ['abx','aby','izy']:
         register='X' if mode=='abx' else 'Y'
-        base=f'recomp_read16_zp(s, (uint8_t){literal})' if mode=='izy' else literal
+        base=f'recomp_read16_zp(s, (uint8_t){literal}, 2)' if mode=='izy' else literal
         result += [f'uint16_t base = {base};',f'uint16_t address = (uint16_t)(base + cpu->{register});']
         dummy='(uint16_t)((base & 0xFF00u) | (address & 0x00FFu))'
-        if name in STORES or name in RMW:result.append(f'(void)recomp_read8(s, {dummy});')
-        else:result.append(f'if ((base & 0xFF00u) != (address & 0xFF00u)) {{ ++cycles; (void)recomp_read8(s, {dummy}); }}')
+        dummy_offset=4 if mode=='izy' else 3
+        if name in STORES or name in RMW:result.append(f'(void)recomp_read8(s, {dummy}, {dummy_offset});')
+        else:result.append(f'if ((base & 0xFF00u) != (address & 0xFF00u)) {{ ++cycles; (void)recomp_read8(s, {dummy}, {dummy_offset}); }}')
     else:raise ValueError('Unimplemented address mode '+mode)
-    return result,'recomp_read8(s, address)'
+    offset='cycles - 3u' if name in RMW else 'cycles - 1u'
+    return result,f'recomp_read8(s, address, (uint8_t)({offset}))'
 
 def emit_semantics(i):
     name,mode,value,pc=i['name'],i['mode'],i['value'],i['pc'];following=(pc+i['size'])&65535
@@ -90,7 +92,7 @@ def emit_semantics(i):
         elif name=='BIT':lines += ['cpu_set_flag(cpu, CPU_Z, (uint8_t)((cpu->A & operand) == 0));','cpu_set_flag(cpu, CPU_N, (uint8_t)((operand & 0x80u) != 0));','cpu_set_flag(cpu, CPU_V, (uint8_t)((operand & 0x40u) != 0));']
     elif name in STORES:lines.append(f'recomp_write8(s, address, cpu->{STORES[name]}, (uint8_t)(cycles - 1u));')
     elif name in RMW:
-        lines.append('uint8_t before = cpu->A;' if mode=='acc' else 'uint8_t before = recomp_read8(s, address);')
+        lines.append('uint8_t before = cpu->A;' if mode=='acc' else 'uint8_t before = recomp_read8(s, address, (uint8_t)(cycles - 3u));')
         if mode!='acc':lines.append('recomp_write8(s, address, before, (uint8_t)(cycles - 2u));')
         if name in ['ROL','ROR']:lines.append('uint8_t carry = cpu_has_flag(cpu, CPU_C);')
         if name in ['ASL','ROL']:
@@ -110,19 +112,20 @@ def emit_semantics(i):
         if mode=='abs':next_pc=f'0x{value:04X}'
         else:
             high=(value&0xff00)|((value+1)&255)
-            lines += [f'uint8_t low = recomp_read8(s, 0x{value:04X});',f'uint8_t high = recomp_read8(s, 0x{high:04X});','uint16_t next_pc = (uint16_t)((uint16_t)low | ((uint16_t)high << 8));'];next_pc='next_pc'
+            lines += [f'uint8_t low = recomp_read8(s, 0x{value:04X}, 3);',f'uint8_t high = recomp_read8(s, 0x{high:04X}, 4);','uint16_t next_pc = (uint16_t)((uint16_t)low | ((uint16_t)high << 8));'];next_pc='next_pc'
     elif name=='JSR':
         ret=(following-1)&65535;lines += [f'recomp_push(cpu, s, 0x{ret>>8:02X}, 3);',f'recomp_push(cpu, s, 0x{ret&255:02X}, 4);'];next_pc=f'0x{value:04X}'
     elif name in ['RTS','RTI']:
-        if name=='RTI':lines.append('cpu_status_from_pull(cpu, recomp_pull(cpu, s));')
-        lines += ['uint8_t low = recomp_pull(cpu, s);','uint8_t high = recomp_pull(cpu, s);','uint16_t next_pc = (uint16_t)((uint16_t)low | ((uint16_t)high << 8));']
+        if name=='RTI':lines.append('cpu_status_from_pull(cpu, recomp_pull(cpu, s, 3));')
+        offset=4 if name=='RTI' else 3
+        lines += [f'uint8_t low = recomp_pull(cpu, s, {offset});',f'uint8_t high = recomp_pull(cpu, s, {offset+1});','uint16_t next_pc = (uint16_t)((uint16_t)low | ((uint16_t)high << 8));']
         if name=='RTS':lines.append('next_pc = (uint16_t)(next_pc + 1u);')
         next_pc='next_pc'
     elif name=='BRK':
-        ret=(pc+2)&65535;lines += [f'recomp_push(cpu, s, 0x{ret>>8:02X}, 2);',f'recomp_push(cpu, s, 0x{ret&255:02X}, 3);','recomp_push(cpu, s, cpu_status_for_push(cpu, 1), 4);','cpu_set_flag(cpu, CPU_I, 1);','uint16_t next_pc = recomp_read16(s, 0xFFFE);'];next_pc='next_pc'
+        ret=(pc+2)&65535;lines += [f'recomp_push(cpu, s, 0x{ret>>8:02X}, 2);',f'recomp_push(cpu, s, 0x{ret&255:02X}, 3);','recomp_push(cpu, s, cpu_status_for_push(cpu, 1), 4);','cpu_set_flag(cpu, CPU_I, 1);','uint16_t next_pc = recomp_read16(s, 0xFFFE, 5);'];next_pc='next_pc'
     elif name in ['PHA','PHP']:lines.append(f'recomp_push(cpu, s, {"cpu->A" if name=="PHA" else "cpu_status_for_push(cpu, 1)"}, 2);')
-    elif name=='PLA':lines += ['cpu->A = recomp_pull(cpu, s);','cpu_set_nz(cpu, cpu->A);']
-    elif name=='PLP':lines.append('cpu_status_from_pull(cpu, recomp_pull(cpu, s));')
+    elif name=='PLA':lines += ['cpu->A = recomp_pull(cpu, s, 3);','cpu_set_nz(cpu, cpu->A);']
+    elif name=='PLP':lines.append('cpu_status_from_pull(cpu, recomp_pull(cpu, s, 3));')
     elif name in ['CLC','SEC','CLI','SEI','CLD','SED','CLV']:
         flag,setting={'CLC':('C',0),'SEC':('C',1),'CLI':('I',0),'SEI':('I',1),'CLD':('D',0),'SED':('D',1),'CLV':('V',0)}[name];lines.append(f'cpu_set_flag(cpu, CPU_{flag}, {setting});')
     elif name in ['INX','DEX','INY','DEY']:
@@ -179,7 +182,8 @@ def emit_image(image,m,output,profile_sha256):
             code,blocks=emit_bank(instructions,bank,window);text.append(code);supported.update(i['opcode'] for i in instructions)
             stats.append(dict(bank=bank,window=window,instructions=len(instructions),basic_blocks=blocks,tiers=dict(Counter(i['tier'] for i in instructions))))
         (output/f'bank{bank}.c').write_text('\n'.join(text))
-    dispatcher=['#include "game/compiled_program.h"']
+    dispatcher=['#include "game/compiled_program.h"',
+                'uint32_t nes_recomp_abi_version(void) { return NES_RECOMP_ABI_VERSION; }']
     for bank in range(8):
         for window in ['low','high']:
             dispatcher.append(f'uint8_t game_bank{bank}_{window}(CPUState*, const RuntimeServices*, uint32_t*);')
@@ -188,8 +192,8 @@ def emit_image(image,m,output,profile_sha256):
     # The opcode is guarded; the writable JMP operand remains a data read.
     dispatcher += ['uint8_t game_execute_slice(CPUState* cpu, const RuntimeServices* s, uint32_t* left) {','  if (!*left) return 1;',
         '  if (cpu->PC == 0x0104 || cpu->PC == 0x0314) {',
-        '    if (recomp_read8(s, cpu->PC) != 0x4C) return 0;',
-        '    const uint16_t next = recomp_read16(s, (uint16_t)(cpu->PC + 1u));',
+        '    if (recomp_read8(s, cpu->PC, 0) != 0x4C) return 0;',
+        '    const uint16_t next = recomp_read16(s, (uint16_t)(cpu->PC + 1u), 1);',
         '    (void)recomp_finish(cpu,s,0xFF,next,3,left); return 1;','  }',
         '  const uint8_t bank = s->bank_for_pc(s->context, cpu->PC);','  const uint8_t high = (uint8_t)(cpu->PC >= 0xC000);','  if (cpu->PC < 0x8000) return 0;','  switch (bank) {']
     for bank in range(8):dispatcher.append(f'    case {bank}: return high ? game_bank{bank}_high(cpu,s,left) : game_bank{bank}_low(cpu,s,left);')
@@ -204,7 +208,7 @@ def emit_image(image,m,output,profile_sha256):
         limitations=['Candidates remain candidates: emitting native C does not prove original reachability or complete program behavior.',
             'Only recovered instruction starts and two guarded RAM interrupt JMPs are compiled. Other missing addresses have no instruction-interpreter fallback.',
             'Both physical CPU windows are emitted; absolute operands are preserved and relative branches use the selected CPU window.',
-            'The service ABI preserves write offsets, RMW double writes and indexed dummy accesses. Reads and instruction-fetch bus side effects are not yet cycle-timestamped.',
+            'Service ABI v2 preserves timed reads/writes, RMW double writes and existing indexed dummy accesses. Baked instruction/operand fetches and omitted dummy accesses remain unrepresented.',
             'CLI/SEI/PLP use the pre-instruction I flag, but interrupt-line sampling within instructions and instruction-fetch bus side effects remain unverified.'])
     (output/'compiled_program.json').write_text(json.dumps(result,indent=2)+'\n')
     print({k:result[k] for k in ['physical_instruction_starts','native_window_instruction_entries','native_basic_blocks']})

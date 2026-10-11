@@ -1,4 +1,5 @@
 #include "runtime/user_rom.hpp"
+#include "runtime/module_abi.hpp"
 #include "game/compiled_program.h"
 #include "game/recovered_resources.h"
 #include "game/world_maps.h"
@@ -213,6 +214,8 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
 #endif
     handle_=SDL_LoadObject(module.u8string().c_str());
     if(!handle_)throw std::runtime_error(SDL_GetError());
+    // Validate before binding any entry point or using module resource layouts.
+    validate_module_abi(handle_);
     imported_execute_slice=reinterpret_cast<decltype(imported_execute_slice)>(symbol(handle_,"game_execute_slice"));
     imported_has_address=reinterpret_cast<decltype(imported_has_address)>(symbol(handle_,"game_has_compiled_address"));
     imported_prg_data=static_cast<const uint8_t(*)[16384]>(symbol(handle_,"game_prg_data"));

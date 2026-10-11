@@ -5,7 +5,7 @@ RuntimeServices ActorView::services(nes::runtime::Bus& bus) {
     if(bus_&&bus_!=&bus)throw std::runtime_error("ActorView cannot observe two buses");
     bus_=&bus;original_=bus.services();
     return {this,
-        [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<ActorView*>(p);return s.original_.read8(s.original_.context,a);},
+        [](void*p,uint16_t a,uint8_t t)->uint8_t{auto&s=*static_cast<ActorView*>(p);return s.original_.read8(s.original_.context,a,t);},
         [](void*p,uint16_t a,uint8_t v,uint8_t t){auto&s=*static_cast<ActorView*>(p);s.original_.write8(s.original_.context,a,v,t);if(a==0x4014)s.observe_upload(v);},
         [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<ActorView*>(p);return s.original_.bank_for_pc(s.original_.context,a);},
         [](void*p,uint8_t t){auto&s=*static_cast<ActorView*>(p);s.original_.advance(s.original_.context,t);},

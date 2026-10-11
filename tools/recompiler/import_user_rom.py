@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import tempfile
@@ -60,11 +61,13 @@ def emit_resources(image, target):
     text += 'const char game_source_sha256[65]="'+digest(image)+'";\n'
     target.write_text(text)
 
-def import_rom(rom, cache, include_root=None):
-    profile_bytes = (HERE/'compatible_profile.json').read_bytes()
-    profile = json.loads(profile_bytes)
-    image = validate_rom(rom, profile)
-    headers = include_root or HERE.parents[1]
+def module_abi_version(headers):
+    text=(headers/'include/recomp/module_abi.h').read_text()
+    match=re.search(r'^\s*#define\s+NES_RECOMP_ABI_VERSION\s+(\d+)u?\s*$',text,re.MULTILINE)
+    if not match:raise ValueError('Native module ABI version missing from headers.')
+    return int(match.group(1))
+
+def cache_identity(headers, profile_bytes):
     include_paths = [headers/'include', headers/'game/include']
     fingerprint = hashlib.sha256(profile_bytes)
     for file in sorted(HERE.glob('*.py')):
@@ -75,14 +78,24 @@ def import_rom(rom, cache, include_root=None):
     fingerprint.update((platform.machine()+platform.system()).encode())
     target_file=headers/'toolchain/target.json'
     if target_file.is_file():fingerprint.update(target_file.read_bytes())
-    identity = fingerprint.hexdigest()
+    return fingerprint.hexdigest()
+
+def import_rom(rom, cache, include_root=None):
+    profile_bytes = (HERE/'compatible_profile.json').read_bytes()
+    profile = json.loads(profile_bytes)
+    image = validate_rom(rom, profile)
+    headers = include_root or HERE.parents[1]
+    include_paths = [headers/'include', headers/'game/include']
+    abi_version = module_abi_version(headers)
+    identity = cache_identity(headers, profile_bytes)
     suffix = '.dll' if os.name == 'nt' else '.dylib' if platform.system() == 'Darwin' else '.so'
     cache.mkdir(parents=True, exist_ok=True)
     module = cache/('user_game'+suffix)
     receipt = cache/'import.json'
     if module.is_file() and receipt.is_file():
         prior = json.loads(receipt.read_text())
-        if prior.get('generator_sha256') == identity and prior.get('module_sha256') == digest(module.read_bytes()):
+        if (prior.get('abi_version') == abi_version and prior.get('generator_sha256') == identity
+                and prior.get('module_sha256') == digest(module.read_bytes())):
             print('Importacion local existente validada.', flush=True)
             return module
     compiler=native_compiler(headers)
@@ -118,7 +131,7 @@ def import_rom(rom, cache, include_root=None):
         subprocess.run([*compiler,mode,*export,*map(str,objects),'-o',str(output)],check=True,stdout=sys.stdout,stderr=sys.stderr)
         if platform.system()=='Darwin':
             subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(output)],check=True,stdout=sys.stdout,stderr=sys.stderr)
-        local_receipt = dict(schema=1,rom_sha256=digest(image),generator_sha256=identity,
+        local_receipt = dict(schema=2,abi_version=abi_version,rom_sha256=digest(image),generator_sha256=identity,
                             module_sha256=digest(output.read_bytes()),machine=platform.machine(),
                             generated_locally=True)
         os.replace(output,module)

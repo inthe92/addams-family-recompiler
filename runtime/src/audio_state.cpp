@@ -86,7 +86,10 @@ void AudioState::write_register(uint16_t address,uint8_t value) {
             else if(!dmc_remaining_){restart_dmc();dmc_start_delay_=static_cast<uint8_t>((cycles_&1u)?3:4);}
             dmc_irq_=false;break;
         case 0x4017:
-            frame_control_=value;if(value&0x40u)frame_irq_=false;
+            // IRQ inhibition is immediate; mode takes effect at delayed reset.
+            frame_control_=static_cast<uint8_t>((frame_control_&0x80u)|(value&0x7Fu));
+            frame_pending_mode_=static_cast<uint8_t>(value&0x80u);
+            if(value&0x40u)frame_irq_=false;
             frame_reset_delay_=static_cast<uint8_t>((cycles_&1u)?4:3);break;
         default:break;
     }
@@ -115,7 +118,10 @@ void AudioState::half_frame() {
 }
 void AudioState::clock_frame_counter() {
     ++frame_cycle_;
-    if(frame_reset_delay_&&--frame_reset_delay_==0){frame_cycle_=0;if(frame_control_&0x80u){quarter_frame();half_frame();}return;}
+    if(frame_reset_delay_&&--frame_reset_delay_==0){
+        frame_control_=static_cast<uint8_t>((frame_control_&0x7Fu)|frame_pending_mode_);
+        frame_cycle_=0;if(frame_control_&0x80u){quarter_frame();half_frame();}return;
+    }
     if(frame_cycle_==8313||frame_cycle_==24939)quarter_frame();
     else if(frame_cycle_==16627){quarter_frame();half_frame();}
     if(frame_control_&0x80u){if(frame_cycle_==41565){quarter_frame();half_frame();}else if(frame_cycle_==41566)frame_cycle_=0;}

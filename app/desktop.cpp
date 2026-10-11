@@ -3,6 +3,7 @@
 #include "game/world_view.hpp"
 #include "game/actor_view.hpp"
 #include "game/god_mode.hpp"
+#include "game/gameplay_diagnostic.hpp"
 #include "runtime/bus.hpp"
 #include "runtime/gl_presenter.hpp"
 #include "runtime/sdl_audio_output.hpp"
@@ -14,6 +15,7 @@
 #include "runtime/mod_engine.hpp"
 #endif
 #include <SDL.h>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <stdexcept>
@@ -44,14 +46,12 @@ static uint8_t buttons(SDL_GameController* pad) {
     return value;
 }
 int main(int argc,char** argv) {
+ std::ofstream diagnostic_output;
+ nes::game::GameplayDiagnostic diagnostic;
  try {
     SDL_SetMainReady();
-#ifdef NES_USER_ROM
-    nes::runtime::UserRomModule imported;
-    if(!imported.prepare(argc,argv))return 0;
-#endif
     uint64_t limit=0;bool fast=false,mute=false;std::string mod_path,capture,audio_path;
-    bool god_enabled=false;
+    bool god_enabled=false,diagnostic_requested=false;
 #ifdef NES_ALPHA_BUILD
     god_enabled=true;
 #endif
@@ -62,11 +62,28 @@ int main(int argc,char** argv) {
         if(option.rfind("-psn_",0)==0)continue;
 #endif
         if(option=="--mute"){mute=true;continue;}
+        if(option=="--diagnostic"){diagnostic_requested=true;continue;}
         if(option=="--god"){god_enabled=true;continue;}
         if(option=="--no-god"){god_enabled=false;continue;}
         if(i+1>=argc)throw std::invalid_argument("Option requires a value");
         if(option=="--frames")limit=std::stoull(argv[++i]);else if(option=="--mod")mod_path=argv[++i];
         else if(option=="--capture")capture=argv[++i];else if(option=="--audio-output")audio_path=argv[++i];else throw std::invalid_argument("Unknown desktop option");}
+    if(diagnostic_requested) {
+        try {
+            const auto preferences=std::unique_ptr<char,decltype(&SDL_free)>(SDL_GetPrefPath("nes-native-lab","diagnostics"),SDL_free);
+            if(!preferences)throw std::runtime_error(SDL_GetError());
+            const auto path=nes::game::GameplayDiagnostic::local_log_path(std::filesystem::u8path(preferences.get()));
+            diagnostic_output.open(path,std::ios::out|std::ios::app);
+            if(!diagnostic_output)throw std::runtime_error("Cannot open local diagnostic file");
+            diagnostic.begin(diagnostic_output,god_enabled,false,!mod_path.empty());
+            if(diagnostic.failed())throw std::runtime_error("Cannot write local diagnostic session header");
+            std::cout<<"Gameplay diagnostic: "<<path.u8string()<<'\n';
+        } catch(const std::exception& e) {std::cerr<<"Gameplay diagnostic unavailable: "<<e.what()<<'\n';}
+    }
+#ifdef NES_USER_ROM
+    nes::runtime::UserRomModule imported;
+    if(!imported.prepare(argc,argv)){diagnostic.end("import_not_started");return 0;}
+#endif
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER|SDL_INIT_EVENTS)!=0)throw std::runtime_error(SDL_GetError());SDLQuit quit;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
@@ -86,6 +103,7 @@ int main(int argc,char** argv) {
     nes::game::ActorView actors;
     CPUState cpu=cpu_initial_state(game_reset_vector);RuntimeServices services=actors.services(bus);
     nes::game::GodMode god;services=god.services(bus,services);god.set_enabled(god_enabled);
+    services=diagnostic.services(bus,services,cpu);
     const auto update_title=[&]{
         const std::string caption=std::string("Addams Family — ")+
 #ifdef NES_ALPHA_BUILD
@@ -113,8 +131,8 @@ int main(int argc,char** argv) {
     while(running&&(!limit||presented<limit)) {
         SDL_Event event;while(SDL_PollEvent(&event)) {
             if(event.type==SDL_QUIT||(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_ESCAPE))running=false;
-            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();}
-            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();}
+            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
             if(event.type==SDL_CONTROLLERDEVICEADDED&&!controller.value)controller.value=SDL_GameControllerOpen(event.cdevice.which);
             if(event.type==SDL_CONTROLLERDEVICEREMOVED&&controller.value&&SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller.value))==event.cdevice.which){SDL_GameControllerClose(controller.value);controller.value=nullptr;}
         }
@@ -127,8 +145,12 @@ int main(int argc,char** argv) {
         const uint64_t before=bus.video().frames();
         while(bus.video().frames()==before) {
             uint32_t budget=1000;if(!game_execute_slice(&cpu,&services,&budget)){
+                diagnostic.missing_address(cpu);diagnostic.end("uncovered_address");
                 show_error("Falta una rutina nativa: banco "+std::to_string(bus.cartridge().bank_for_pc(cpu.PC))+", PC decimal "+std::to_string(cpu.PC));return 2;}
+            diagnostic.slice(cpu);
         }
+        diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());
+        if(diagnostic.failed()&&diagnostic_requested){std::cerr<<"Gameplay diagnostic stopped: output write failed; session evidence is incomplete\n";diagnostic_requested=false;}
         bus.video().consume_frame();auto samples=bus.audio().take_samples();audio_output.submit(samples);if(wav)wav->append(samples);
         world_view.compose(bus,&actors);presenter.present(world_view.frame().data(),world_view.width,world_view.height);++presented;
         if(limit&&presented==limit&&!capture.empty())presenter.capture(capture);
@@ -141,8 +163,10 @@ int main(int argc,char** argv) {
             while(static_cast<double>(SDL_GetPerformanceCounter())<next_deadline)SDL_Delay(1);}
     }
     if(wav)wav->finish();
+    diagnostic.end(limit&&presented==limit?"frame_limit":"user_quit");
+    if(diagnostic.failed()&&diagnostic_requested)std::cerr<<"Gameplay diagnostic incomplete: output write failed\n";
     std::cout<<"Presented "<<presented<<" frames; screen="<<static_cast<unsigned>(bus.ram().read(0x045B))<<"; NMI="<<bus.nmi_count()<<"; DMA="<<bus.dma_count()<<"; DMC="<<bus.dmc_dma_count()<<"; audio_samples="<<bus.audio().produced_samples()<<"; device_submitted="<<audio_output.submitted_samples()<<"; device_skipped="<<audio_output.skipped_samples()<<"; queued_bytes="<<audio_output.queued_bytes()<<"; extended_background="<<world_view.extended_background()<<"; camera_x="<<world_view.camera_x()<<"; lateral_sprite_pixels="<<world_view.lateral_sprite_pixels()<<'\n';
     std::cout<<"God mode="<<god.enabled()<<"; blocked_damage="<<god.blocked_damage()<<"; rescues="<<god.rescues()<<'\n';
     return 0;
- } catch(const std::exception& error){show_error(error.what());return 1;}
+ } catch(const std::exception& error){diagnostic.error("runtime_exception");diagnostic.end("exception");show_error(error.what());return 1;}
 }

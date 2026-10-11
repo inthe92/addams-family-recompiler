@@ -4,7 +4,7 @@ namespace nes::game {
 RuntimeServices GodMode::services(nes::runtime::Bus& bus, RuntimeServices original) {
     bus_=&bus;original_=original;
     return {this,
-        [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.read8(s.original_.context,a);},
+        [](void*p,uint16_t a,uint8_t t)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.read8(s.original_.context,a,t);},
         [](void*p,uint16_t a,uint8_t v,uint8_t t){static_cast<GodMode*>(p)->write(a,v,t);},
         [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.bank_for_pc(s.original_.context,a);},
         [](void*p,uint8_t t){auto&s=*static_cast<GodMode*>(p);s.original_.advance(s.original_.context,t);},
