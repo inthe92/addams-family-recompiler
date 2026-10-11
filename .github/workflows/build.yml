@@ -105,13 +105,17 @@ jobs:
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-python
       - name: Audit source export
+        id: source_audit
         run: python -B tools/public/audit_public.py .
       - name: Build engine without ROM
+        id: build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
           cmake --build build --parallel 4
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
           python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+      - name: Run complete CTest suite
+        run: |
           ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
@@ -127,19 +131,39 @@ jobs:
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
+        id: toolchain
+        # Keep A02 failed; independently verify the portable package.
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
         run: |
           python -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
-          mkdir -p smoke
-          cp -R tools smoke/tools
-          cp -R runtime-tools smoke/toolchain
-          runtime-tools/python/python.exe -B tests/public_toolchain_smoke.py smoke
-          runtime-tools/python/python.exe -B tests/public_import_process_checks.py smoke build/import_probe.exe
       - name: Package portable frontend
-        run: python -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools
+        id: package
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
+        run: |
+          set -o pipefail
+          python -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools 2>&1 | tee build/windows-package.log
+      - name: Verify extracted portable Windows package
+        id: package_checks
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: |
+          python -B tests/windows_package_checks.py --self-test
+          python -B tests/windows_package_checks.py --build build --output dist --report build/windows-package-verification.json
+      - name: Preserve Windows package verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package-verification-x86_64
+          path: |
+            build/windows-package.log
+            build/windows-package-verification.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
           name: frontend-windows-x86_64
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
           if-no-files-found: error
 
   linux:

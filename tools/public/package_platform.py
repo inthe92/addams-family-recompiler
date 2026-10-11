@@ -101,6 +101,7 @@ def package(build,output,toolchain,system=None,arch=None):
         folder=output/'NES-Native-Lab-Windows-x86_64';folder.mkdir(exist_ok=True)
         shutil.copyfile(build/'nes_native.exe',folder/'nes_native.exe')
         copy_resources(folder,toolchain)
+        shutil.copyfile(ROOT/'tools/public/WINDOWS_README.txt',folder/'WINDOWS_README.txt')
         target=output/(folder.name+'.zip');make_archive(folder,target)
     else:
         # ELF dependencies and AppImage runtime are handled by linuxdeploy.
