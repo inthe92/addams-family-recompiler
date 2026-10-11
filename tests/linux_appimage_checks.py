@@ -91,14 +91,17 @@ def verify(args, report):
         # --import-only avoids requiring a ROM or a graphical display, while still
         # loading AppRun and the packaged executable through the AppImage mount.
         direct_cache = clean / 'runtime cache'
-        direct = subprocess.run([str(copied), '--import-only', '--import-cache', str(direct_cache)],
+        invalid_rom = clean / 'synthetic invalid image.bin'
+        invalid_rom.write_bytes(b'not a private ROM')
+        direct = subprocess.run([str(copied), '--import-only', '--rom', str(invalid_rom),
+                                 '--import-cache', str(direct_cache)],
                                 cwd=clean, env={**env, 'SDL_VIDEODRIVER': 'dummy'},
                                 capture_output=True, text=True, timeout=60)
         report['direct_execution'] = {'returncode': direct.returncode,
                                       'stdout': direct.stdout, 'stderr': direct.stderr,
-                                      'mode': 'direct AppImage; no ROM/import requested'}
-        if direct.returncode != 0:
-            raise RuntimeError('Direct AppImage execution failed')
+                                      'mode': 'direct AppImage; expected rejection of synthetic invalid input'}
+        if direct.returncode == 0 or 'import' not in (direct.stdout + direct.stderr).lower():
+            raise RuntimeError('Direct AppImage did not execute its import error path')
         report['clean_path_spaces'] = 'PASS'
     report['result'] = 'PASS'
 
