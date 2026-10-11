@@ -18,6 +18,7 @@ public:
     uint8_t read8(uint16_t address, uint8_t cycle_offset);
     void write8(uint16_t address, uint8_t value, uint8_t cycle_offset = 0);
     void advance(uint64_t cycles);
+    void poll_irq(uint8_t instruction_cycles, uint8_t poll_offsets);
     uint8_t boundary(CPUState& cpu, uint8_t irq_mask = 0xFF);
     void set_buttons(unsigned port, uint8_t buttons);
     MainRAM& ram() noexcept { return ram_; }
@@ -44,6 +45,9 @@ private:
     std::array<uint8_t, 2> buttons_{}, controller_shift_{};
     bool strobe_{}, dma_pending_{};
     uint8_t dma_page_{};
+    struct IRQSample { uint64_t cycle{}; bool level{}; };
+    std::array<IRQSample, 8> irq_samples_{};
+    bool irq_polled_{}, irq_decision_{};
     // Keep timed writes for diagnostics alongside native channel state.
     std::vector<AudioWrite> audio_writes_;
     void sync_devices(uint64_t target);

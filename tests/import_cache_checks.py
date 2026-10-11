@@ -32,6 +32,7 @@ class CacheABI(unittest.TestCase):
                     compile_probe.assert_called_once_with(ROOT)
     def test_current_abi_reuses_cache(self):self.check_receipt(importer.module_abi_version(ROOT))
     def test_old_abi_regenerates(self):self.check_receipt(1)
+    def test_v2_abi_regenerates(self):self.check_receipt(2)
     def test_missing_abi_regenerates(self):self.check_receipt(None)
     def test_changed_generator_regenerates(self):self.check_receipt(importer.module_abi_version(ROOT),False)
 

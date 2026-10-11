@@ -8,14 +8,37 @@ RuntimeServices Bus::services() {
         [](void* context, uint16_t a, uint8_t v, uint8_t offset) { static_cast<Bus*>(context)->write8(a, v, offset); },
         [](void* context, uint16_t a) { return static_cast<Bus*>(context)->cartridge_.bank_for_pc(a); },
         [](void* context, uint8_t cycles) { static_cast<Bus*>(context)->advance(cycles); },
-        [](void* context, CPUState* cpu, uint8_t mask) { return static_cast<Bus*>(context)->boundary(*cpu, mask); }};
+        [](void* context, CPUState* cpu, uint8_t mask) { return static_cast<Bus*>(context)->boundary(*cpu, mask); },
+        [](void* context, uint8_t total, uint8_t offsets) { static_cast<Bus*>(context)->poll_irq(total, offsets); }};
 }
 void Bus::sync_devices(uint64_t target) {
     if (target < device_cycles_) throw std::logic_error("Device time cannot move backwards");
-    const uint64_t delta = target - device_cycles_;
-    video_.advance_cpu_cycles(delta);
-    audio_.advance_cpu_cycles(delta);
-    device_cycles_ = target;
+    // Preserve detector history even when a timed access advances several
+    // cycles. APU events and status side effects keep their existing times.
+    // The detector sample visible in the next cycle precedes that cycle's
+    // APU tick; an acknowledgement cannot erase an earlier saved sample.
+    while (device_cycles_ < target) {
+        const uint64_t next = device_cycles_ + 1;
+        irq_samples_[next & 7u] = {next, audio_.irq_pending()};
+        video_.advance_cpu_cycles(1);
+        audio_.advance_cpu_cycles(1);
+        device_cycles_ = next;
+    }
+}
+void Bus::poll_irq(uint8_t total, uint8_t offsets) {
+    if (!total || total > 8 || cycles_ < total || device_cycles_ != cycles_ ||
+        (offsets & 1u) || (unsigned(offsets) >> total))
+        throw std::logic_error("Invalid native IRQ poll descriptor");
+    if (irq_polled_) throw std::logic_error("Native IRQ decision was not consumed");
+    irq_decision_ = false;
+    const uint64_t start = cycles_ - total;
+    for (unsigned n = 1; n < total; ++n) if (offsets & (1u << n)) {
+        const uint64_t when = start + n;
+        const auto& sample = irq_samples_[when & 7u];
+        if (sample.cycle != when) throw std::logic_error("Native IRQ sample history unavailable");
+        irq_decision_ = irq_decision_ || sample.level;
+    }
+    irq_polled_ = true;
 }
 uint8_t Bus::read8(uint16_t address) {
     if (address < 0x2000) open_bus_ = ram_.read(address);
@@ -90,10 +113,14 @@ void Bus::deliver_interrupt(CPUState& cpu, uint16_t vector) {
 }
 uint8_t Bus::boundary(CPUState& cpu, uint8_t irq_mask) {
     if (irq_mask == 0xFF) irq_mask = static_cast<uint8_t>(cpu.P & CPU_I);
+    // Consume before DMA/interrupt entry so their cycles cannot replace this
+    // instruction's decision. Direct diagnostic boundaries have no descriptor.
+    const bool polled = irq_polled_, decision = irq_decision_;
+    irq_polled_ = irq_decision_ = false;
     if (dma_pending_) perform_dma();
     if (audio_.dmc_read_requested()) perform_dmc_dma();
     if (video_.consume_nmi()) { deliver_interrupt(cpu, 0xFFFA); ++nmi_count_; return 1; }
-    if (audio_.irq_pending() && !irq_mask) { deliver_interrupt(cpu, 0xFFFE); ++irq_count_; return 1; }
+    if ((polled ? decision : audio_.irq_pending()) && !irq_mask) { deliver_interrupt(cpu, 0xFFFE); ++irq_count_; return 1; }
     return static_cast<uint8_t>(video_.pending_frame());
 }
 }

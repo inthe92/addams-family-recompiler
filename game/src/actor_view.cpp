@@ -9,7 +9,8 @@ RuntimeServices ActorView::services(nes::runtime::Bus& bus) {
         [](void*p,uint16_t a,uint8_t v,uint8_t t){auto&s=*static_cast<ActorView*>(p);s.original_.write8(s.original_.context,a,v,t);if(a==0x4014)s.observe_upload(v);},
         [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<ActorView*>(p);return s.original_.bank_for_pc(s.original_.context,a);},
         [](void*p,uint8_t t){auto&s=*static_cast<ActorView*>(p);s.original_.advance(s.original_.context,t);},
-        [](void*p,CPUState*cpu,uint8_t mask)->uint8_t{auto&s=*static_cast<ActorView*>(p);s.observe_boundary(*cpu);return s.original_.boundary(s.original_.context,cpu,mask);}};
+        [](void*p,CPUState*cpu,uint8_t mask)->uint8_t{auto&s=*static_cast<ActorView*>(p);s.observe_boundary(*cpu);return s.original_.boundary(s.original_.context,cpu,mask);},
+        [](void*p,uint8_t total,uint8_t offsets){auto&s=*static_cast<ActorView*>(p);s.original_.poll_irq(s.original_.context,total,offsets);}};
 }
 void ActorView::observe_boundary(const CPUState& cpu) {
     const auto bank=bus_->cartridge().bank_for_pc(cpu.PC);

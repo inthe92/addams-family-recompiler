@@ -43,7 +43,7 @@ jobs:
           python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
       - name: Run complete CTest suite
         run: |
-          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit "$PWD/build/ctest-results.xml"
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
@@ -123,7 +123,7 @@ jobs:
           python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
       - name: Run complete CTest suite
         run: |
-          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit "$PWD/build/ctest-results.xml"
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
         run: python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
@@ -193,7 +193,7 @@ jobs:
           cmake --build build --parallel 4
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
           python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
-          ctest --test-dir build --output-on-failure --verbose --no-tests=error --output-junit "$PWD/build/ctest-results.xml"
+          ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml

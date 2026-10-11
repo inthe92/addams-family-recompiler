@@ -8,7 +8,8 @@ RuntimeServices GodMode::services(nes::runtime::Bus& bus, RuntimeServices origin
         [](void*p,uint16_t a,uint8_t v,uint8_t t){static_cast<GodMode*>(p)->write(a,v,t);},
         [](void*p,uint16_t a)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.bank_for_pc(s.original_.context,a);},
         [](void*p,uint8_t t){auto&s=*static_cast<GodMode*>(p);s.original_.advance(s.original_.context,t);},
-        [](void*p,CPUState*c,uint8_t m)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.boundary(s.original_.context,c,m);}};
+        [](void*p,CPUState*c,uint8_t m)->uint8_t{auto&s=*static_cast<GodMode*>(p);return s.original_.boundary(s.original_.context,c,m);},
+        [](void*p,uint8_t total,uint8_t offsets){auto&s=*static_cast<GodMode*>(p);s.original_.poll_irq(s.original_.context,total,offsets);}};
 }
 void GodMode::write(uint16_t address,uint8_t value,uint8_t offset) {
     auto&r=bus_->ram();

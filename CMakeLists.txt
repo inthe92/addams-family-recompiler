@@ -66,6 +66,9 @@ if(BUILD_TESTING)
   add_test(NAME diagnostic_harness_contract COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/known_divergence_checks.py")
   set_tests_properties(diagnostic_harness_contract PROPERTIES LABELS "harness;synthetic" TIMEOUT 30)
+  add_test(NAME ctest_verification_contract COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/verify_ctest_suite_checks.py")
+  set_tests_properties(ctest_verification_contract PROPERTIES LABELS "harness;ci;synthetic" TIMEOUT 30)
   set(test_fixture_dir "${CMAKE_CURRENT_BINARY_DIR}/tests/generated")
   add_custom_command(
     OUTPUT "${test_fixture_dir}/opcode_fixtures.c" "${test_fixture_dir}/opcode_fixtures.hpp"
@@ -88,6 +91,39 @@ if(BUILD_TESTING)
   target_link_libraries(native_program_checks PRIVATE native_test_fixtures)
   add_test(NAME native_stack_programs COMMAND native_program_checks)
   set_tests_properties(native_stack_programs PROPERTIES LABELS "cpu;synthetic" TIMEOUT 30)
+  # PAL program contracts and independent CPU-poll controls remain ordinary
+  # tests, including the regressions that fail before the production fix.
+  add_custom_command(
+    OUTPUT "${test_fixture_dir}/irq_poll_fixtures.c" "${test_fixture_dir}/irq_poll_fixtures.hpp"
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/emit_irq_poll_fixtures.py" "${test_fixture_dir}"
+    DEPENDS tests/emit_irq_poll_fixtures.py tools/recompiler/emit_blocks.py tools/recompiler/opcodes_6502.py
+    COMMENT "Generating synthetic native IRQ-poll fixtures (no ROM)"
+    VERBATIM)
+  add_library(irq_poll_test_fixtures STATIC "${test_fixture_dir}/irq_poll_fixtures.c")
+  target_include_directories(irq_poll_test_fixtures PUBLIC "${test_fixture_dir}" include game/include)
+  set_target_properties(irq_poll_test_fixtures PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
+  add_executable(cpu_irq_poll_checks tests/cpu_irq_poll_checks.cpp)
+  target_link_libraries(cpu_irq_poll_checks PRIVATE irq_poll_test_fixtures nes_runtime)
+  foreach(contract pal08_alignment0 pal08_alignment1 pal07 held_clear held_no_clear held_masked branches)
+    add_test(NAME cpu_irq_poll_${contract} COMMAND cpu_irq_poll_checks "${contract}")
+    set_tests_properties(cpu_irq_poll_${contract} PROPERTIES LABELS "cpu;irq-poll;synthetic" TIMEOUT 30)
+  endforeach()
+  set_tests_properties(cpu_irq_poll_pal08_alignment0 cpu_irq_poll_pal08_alignment1 cpu_irq_poll_pal07
+    PROPERTIES LABELS "cpu;apu;irq-poll;synthetic;pal-published-contract")
+  add_custom_command(
+    OUTPUT "${test_fixture_dir}/irq_edge_fixtures.c" "${test_fixture_dir}/irq_edge_fixtures.hpp"
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/emit_irq_edge_fixtures.py" "${test_fixture_dir}"
+    DEPENDS tests/emit_irq_edge_fixtures.py tests/emit_irq_poll_fixtures.py tools/recompiler/emit_blocks.py tools/recompiler/opcodes_6502.py
+    COMMENT "Generating synthetic IRQ edge controls (no ROM)" VERBATIM)
+  add_library(irq_edge_test_fixtures STATIC "${test_fixture_dir}/irq_edge_fixtures.c")
+  target_include_directories(irq_edge_test_fixtures PUBLIC "${test_fixture_dir}" include game/include)
+  set_target_properties(irq_edge_test_fixtures PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON)
+  add_executable(cpu_irq_edge_checks tests/cpu_irq_edge_checks.cpp)
+  target_link_libraries(cpu_irq_edge_checks PRIVATE irq_edge_test_fixtures user_game_view)
+  foreach(contract masks edges priority_dma adapters)
+    add_test(NAME cpu_irq_edge_${contract} COMMAND cpu_irq_edge_checks "${contract}")
+    set_tests_properties(cpu_irq_edge_${contract} PROPERTIES LABELS "cpu;irq-poll;synthetic;runtime-poll-contract" TIMEOUT 30)
+  endforeach()
   add_executable(ppustatus_timing_check tests/ppustatus_timing_check.cpp)
   target_link_libraries(ppustatus_timing_check PRIVATE native_test_fixtures nes_runtime)
   add_test(NAME ppustatus_read_timing COMMAND ppustatus_timing_check)
@@ -102,18 +138,19 @@ if(BUILD_TESTING)
   # The dynamic module loader uses SDL and belongs to the desktop build.
   # Keep its ABI regression mandatory whenever that loader is built.
   if(NES_ENABLE_DESKTOP)
-    foreach(abi missing old current)
+    foreach(abi missing old v2 current)
       add_library(module_abi_${abi} MODULE tests/module_abi_fixture.c)
       target_include_directories(module_abi_${abi} PRIVATE include)
       set_target_properties(module_abi_${abi} PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED ON WINDOWS_EXPORT_ALL_SYMBOLS ON)
     endforeach()
     target_compile_definitions(module_abi_old PRIVATE TEST_ABI_VERSION=1u)
+    target_compile_definitions(module_abi_v2 PRIVATE TEST_ABI_VERSION=2u)
     target_compile_definitions(module_abi_current PRIVATE TEST_ABI_VERSION=NES_RECOMP_ABI_VERSION)
     add_executable(module_abi_checks tests/module_abi_checks.cpp)
     target_link_libraries(module_abi_checks PRIVATE user_rom)
-    add_dependencies(module_abi_checks module_abi_missing module_abi_old module_abi_current)
+    add_dependencies(module_abi_checks module_abi_missing module_abi_old module_abi_v2 module_abi_current)
     add_test(NAME module_abi_contract COMMAND module_abi_checks
-      "$<TARGET_FILE:module_abi_missing>" "$<TARGET_FILE:module_abi_old>" "$<TARGET_FILE:module_abi_current>")
+      "$<TARGET_FILE:module_abi_missing>" "$<TARGET_FILE:module_abi_old>" "$<TARGET_FILE:module_abi_v2>" "$<TARGET_FILE:module_abi_current>")
     set_tests_properties(module_abi_contract PROPERTIES LABELS "abi;synthetic" TIMEOUT 30)
   endif()
   add_executable(device_checks tests/device_checks.cpp)
@@ -161,7 +198,7 @@ if(BUILD_TESTING)
     endif()
   endif()
   if(WIN32)
-    foreach(test_target opcode_codegen_checks native_program_checks ppustatus_timing_check device_checks bus_timing_checks gameplay_diagnostic_checks apu_audio_checks)
+    foreach(test_target opcode_codegen_checks native_program_checks cpu_irq_poll_checks cpu_irq_edge_checks ppustatus_timing_check device_checks bus_timing_checks gameplay_diagnostic_checks apu_audio_checks)
       target_link_options(${test_target} PRIVATE -static -static-libgcc -static-libstdc++)
     endforeach()
   endif()

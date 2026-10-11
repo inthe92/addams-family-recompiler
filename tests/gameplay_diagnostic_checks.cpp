@@ -48,7 +48,7 @@ static void save(Fixture& f) {f.diagnostic.end("synthetic_end");exported.push_ba
 static void disabled() {
     Fixture f(false);auto original=f.bus->services();
     require(f.s.context==original.context&&f.s.read8==original.read8&&f.s.write8==original.write8&&
-        f.s.advance==original.advance&&f.s.boundary==original.boundary&&f.s.bank_for_pc==original.bank_for_pc,"Disabled observer must return original services verbatim");
+        f.s.advance==original.advance&&f.s.boundary==original.boundary&&f.s.bank_for_pc==original.bank_for_pc&&f.s.poll_irq==original.poll_irq,"Disabled observer must return original services verbatim");
     f.write(0x0633,1);f.frame();f.diagnostic.error("disabled");f.diagnostic.end("disabled");
     require(f.log.str().empty(),"Disabled logging produces no events");
 }
@@ -115,7 +115,8 @@ struct Trace {
             [](void* p,uint16_t a,uint8_t v,uint8_t t){auto& s=*static_cast<Trace*>(p);s.bus->write8(a,v,t);s.accesses.push_back({'W',a,v,s.bus->cycles()+t});},
             [](void*,uint16_t)->uint8_t{return 0;},
             [](void* p,uint8_t t){static_cast<Trace*>(p)->bus->advance(t);},
-            [](void* p,CPUState* c,uint8_t m)->uint8_t{return static_cast<Trace*>(p)->bus->boundary(*c,m);}};
+            [](void* p,CPUState* c,uint8_t m)->uint8_t{return static_cast<Trace*>(p)->bus->boundary(*c,m);},
+            [](void* p,uint8_t total,uint8_t offsets){static_cast<Trace*>(p)->bus->poll_irq(total,offsets);}};
     }
 };
 static void same(const Fixture& a,const Fixture& b,const Trace& ta,const Trace& tb) {

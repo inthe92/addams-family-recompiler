@@ -150,6 +150,13 @@ def emit_bank(instructions,bank,window):
             finish = (f'recomp_finish_polled(cpu, s, {bank}, {next_pc}, cycles, left, irq_mask)'
                       if i['name'] in ['CLI','SEI','PLP']
                       else f'recomp_finish(cpu, s, {bank}, {next_pc}, cycles, left)')
+            if i['name'] in BRANCHES:
+                # Operand-fetch poll, plus PCH-fixup poll only on a crossing
+                # taken branch. A three-cycle taken branch is not a JMP poll.
+                plan = '(uint8_t)(cycles == 4 ? 0x0Au : 0x02u)'
+                finish = f'recomp_finish_with_plan(cpu, s, {bank}, {next_pc}, cycles, left, (uint8_t)(cpu->P & CPU_I), {plan})'
+            elif i['name'] == 'BRK':
+                finish = f'recomp_finish_with_plan(cpu, s, {bank}, {next_pc}, cycles, left, CPU_I, 0)'
             chunks.append(f'  if ({finish}) return 1;')
             following=pc+i['size'];target=direct_target(i)
             if i['name'] in BRANCHES:
@@ -208,8 +215,8 @@ def emit_image(image,m,output,profile_sha256):
         limitations=['Candidates remain candidates: emitting native C does not prove original reachability or complete program behavior.',
             'Only recovered instruction starts and two guarded RAM interrupt JMPs are compiled. Other missing addresses have no instruction-interpreter fallback.',
             'Both physical CPU windows are emitted; absolute operands are preserved and relative branches use the selected CPU window.',
-            'Service ABI v2 preserves timed reads/writes, RMW double writes and existing indexed dummy accesses. Baked instruction/operand fetches and omitted dummy accesses remain unrepresented.',
-            'CLI/SEI/PLP use the pre-instruction I flag, but interrupt-line sampling within instructions and instruction-fetch bus side effects remain unverified.'])
+            'Service ABI v3 preserves timed accesses and adds instruction-specific IRQ detector poll descriptors. Baked instruction/operand fetches and omitted dummy accesses remain unrepresented.',
+            'CLI/SEI/PLP use pre-instruction I; RTI uses restored I. Whole-cycle IRQ history is covered by synthetic CPU and published PAL program contracts; subcycle PAL collision phases and instruction-fetch bus side effects remain unverified.'])
     (output/'compiled_program.json').write_text(json.dumps(result,indent=2)+'\n')
     print({k:result[k] for k in ['physical_instruction_starts','native_window_instruction_entries','native_basic_blocks']})
 

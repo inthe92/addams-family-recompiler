@@ -15,8 +15,8 @@ struct FixtureBus {
     std::array<uint8_t,65536> memory;
     std::vector<Write> writes;
     std::vector<Access> accesses;
-    unsigned cycles{},advance_calls{},boundary_calls{};
-    uint8_t irq_mask{};
+    unsigned cycles{},advance_calls{},boundary_calls{},poll_calls{};
+    uint8_t irq_mask{},poll_total{},poll_offsets{};
 };
 static void require(bool condition,const char* what,const OpcodeFixture& f) {
     if(!condition)throw std::runtime_error(std::string(what)+" opcode="+std::to_string(f.opcode)+" PC="+std::to_string(f.pc));
@@ -53,11 +53,14 @@ int main(){
   [](void*p,uint16_t a,uint8_t v,uint8_t t){auto&b=*static_cast<FixtureBus*>(p);b.memory[a]=v;b.writes.push_back({a,v,t});b.accesses.push_back({'W',a,v,t});},
   [](void*,uint16_t)->uint8_t{return 0;},
   [](void*p,uint8_t t){auto& b=*static_cast<FixtureBus*>(p);b.cycles+=t;++b.advance_calls;},
-  [](void*p,CPUState*,uint8_t mask)->uint8_t{auto& b=*static_cast<FixtureBus*>(p);b.irq_mask=mask;++b.boundary_calls;return 0;}};
+  [](void*p,CPUState*,uint8_t mask)->uint8_t{auto& b=*static_cast<FixtureBus*>(p);b.irq_mask=mask;++b.boundary_calls;return 0;},
+  [](void*p,uint8_t total,uint8_t offsets){auto& b=*static_cast<FixtureBus*>(p);
+    if(b.advance_calls!=1 || b.boundary_calls || b.cycles!=total)throw std::runtime_error("Poll must follow one advance and precede boundary");
+    ++b.poll_calls;b.poll_total=total;b.poll_offsets=offsets;}};
  uint32_t cases=0, legacy_cases=0;
  for(const auto&f:opcode_fixtures)for(unsigned scenario=0;scenario<6;++scenario)for(uint8_t initial_flags:{uint8_t(0x24),uint8_t(0x65),uint8_t(0xe7),uint8_t(0x2f)}){
   bus.memory.fill(0xa5);bus.memory[0x30ff]=0x56;bus.memory[0x3000]=0x12;bus.memory[0x3100]=0x34;bus.writes.clear();bus.accesses.clear();bus.cycles=0;
-  bus.advance_calls=bus.boundary_calls=0;bus.irq_mask=0xff;
+  bus.advance_calls=bus.boundary_calls=bus.poll_calls=0;bus.irq_mask=0xff;
   if(scenario==1)bus.memory.fill(0);
   if(scenario>=2){
    for(unsigned a=0;a<65536;++a)bus.memory[a]=uint8_t(a*73u+(a/256u)*19u+scenario*11u);
@@ -143,6 +146,9 @@ int main(){
   require(cpu.A==expected.A&&cpu.X==expected.X&&cpu.Y==expected.Y&&cpu.SP==expected.SP&&cpu.P==expected.P&&cpu.PC==expected.PC,"Register/flag/PC specification",f);
   require(bus.irq_mask == ((name=="CLI"||name=="SEI"||name=="PLP"?initial_status:expected.P)&CPU_I),"IRQ poll uses oldI forCLI/SEI/PLP and restoredI forRTI",f);
   require(bus.advance_calls==1&&bus.boundary_calls==1,"Exactly one completion and boundary poll",f);
+  const auto plan=uint8_t(name=="BRK"?0:mode=="rel"?(cycles==4?0x0a:2):(1u<<(cycles-1)));
+  require(bus.poll_calls==1&&bus.poll_total==cycles&&bus.poll_offsets==plan,
+          "Documented IRQ detector poll offsets (branch first/fixup, ordinary last, no BRK poll)",f);
   require(bus.cycles==cycles,"Documented timing",f);require(bus.writes.size()==writes.size(),"Write footprint",f);
   for(std::size_t i=0;i<writes.size();++i)require(bus.writes[i].address==writes[i].address&&bus.writes[i].value==writes[i].value&&bus.writes[i].cycle==writes[i].cycle,"Ordered write/offset",f);
   require(bus.accesses.size()==expected_accesses.size(),"Observable read/write footprint (fetches not modeled)",f);
@@ -158,7 +164,7 @@ int main(){
  // saved bytes is small and avoids depending on incidental memory patterns.
  for(const auto& f:opcode_fixtures)if(f.legacy&&(f.opcode==0x28||f.opcode==0x40))for(unsigned saved=0;saved<256;++saved){
   bus.memory.fill(0);bus.writes.clear();bus.accesses.clear();bus.cycles=0;
-  bus.advance_calls=bus.boundary_calls=0;bus.irq_mask=0xff;
+  bus.advance_calls=bus.boundary_calls=bus.poll_calls=0;bus.irq_mask=0xff;
   const bool rti=f.opcode==0x40;
   auto cpu=cpu_initial_state(f.pc);cpu.A=0x18;cpu.X=0x29;cpu.Y=0x3a;cpu.P=0x65;cpu.SP=rti?0xfe:0xff;
   bus.memory[rti?0x1ff:0x100]=uint8_t(saved);
@@ -170,6 +176,7 @@ int main(){
   uint32_t left=1;require(game_bank0_fixture(&cpu,&s,&left)&&left==0,"Status fixture dispatch",f);
   require(cpu.A==0x18&&cpu.X==0x29&&cpu.Y==0x3a&&cpu.P==status&&cpu.SP==(rti?1:0)&&cpu.PC==(rti?0x9234:uint16_t(f.pc+1)),"All saved status bytes; B/U normalized; stack wrap",f);
   require(bus.cycles==(rti?6u:4u)&&bus.advance_calls==1&&bus.boundary_calls==1&&bus.irq_mask==(rti?(status&4):4),"Status instruction cycles/poll selection",f);
+  require(bus.poll_calls==1&&bus.poll_total==(rti?6:4)&&bus.poll_offsets==(rti?0x20:8),"Status instruction detector descriptor",f);
   require(bus.writes.empty()&&bus.memory==expected_memory&&bus.accesses.size()==accesses.size(),"Status read-only memory effects",f);
   for(std::size_t i=0;i<accesses.size();++i)require(bus.accesses[i].kind=='R'&&bus.accesses[i].address==accesses[i].address&&bus.accesses[i].value==accesses[i].value&&bus.accesses[i].offset==accesses[i].offset,"Status ordered stack reads",f);
   ++cases;

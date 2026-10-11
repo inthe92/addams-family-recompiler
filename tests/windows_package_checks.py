@@ -294,7 +294,8 @@ def extracted_checks(resources, directory):
         run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', resources])
         run([python, '-B', ROOT / 'tests/public_import_process_checks.py', resources,
              Path(os.environ['NES_PACKAGE_TEST_BUILD']) / 'import_probe.exe'])
-        # Reuse the four existing cache decision tests, overriding only their
+        # Reuse all five cache decision tests, including ABI v2 regeneration,
+        # overriding only their
         # resource root to the extracted package. ROM validation/compiler are
         # mocked by that existing harness; this is NOT a real ROM cache import.
         cache_code = '''import importlib.util,sys,unittest
@@ -306,7 +307,7 @@ module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 module.ROOT=resources
 assert module.importer.HERE == resources/'tools/recompiler'
 result=unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromModule(module))
-assert result.testsRun==4 and not result.skipped
+assert result.testsRun==5 and not result.skipped
 sys.exit(0 if result.wasSuccessful() else 1)
 '''
         run([python, '-B', '-c', cache_code, resources, ROOT / 'tests/import_cache_checks.py'])

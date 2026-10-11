@@ -97,7 +97,9 @@ RuntimeServices GameplayDiagnostic::services(runtime::Bus& bus,RuntimeServices o
             const auto result=s.original_.boundary?s.original_.boundary(s.original_.context,c,mask):0;
             s.cpu_=*c;s.event_cycle_=s.bus_->cycles();s.event_frame_=s.bus_->video().frames();
             s.event_bank_=s.bus_->cartridge().bank_for_pc(c->PC);
-            if(s.dirty_||s.mapper_dirty_)s.observe();return result;}};
+            if(s.dirty_||s.mapper_dirty_)s.observe();return result;},
+        [](void* p,uint8_t total,uint8_t offsets){auto& s=*static_cast<GameplayDiagnostic*>(p);
+            if(s.original_.poll_irq)s.original_.poll_irq(s.original_.context,total,offsets);}};
 }
 bool GameplayDiagnostic::stable_room() const {
     const auto& r=bus_->ram();

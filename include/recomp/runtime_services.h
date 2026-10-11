@@ -15,6 +15,10 @@ typedef struct RuntimeServices {
     void (*advance)(void*, uint8_t cycles);
     /* Return 1 after interrupt/mod delivery or a requested scheduler yield. */
     uint8_t (*boundary)(void*, CPUState*, uint8_t irq_mask_at_poll);
+    /* ABI v3: after advance(total), select this instruction's detector samples.
+       Bit n selects start+n; branches may select more than one. No bus access
+       or clock advancement is performed here. boundary consumes the decision. */
+    void (*poll_irq)(void*, uint8_t total, uint8_t poll_offsets);
 } RuntimeServices;
 
 static inline uint8_t recomp_read8(const RuntimeServices* s, uint16_t address, uint8_t offset) {
@@ -47,14 +51,22 @@ static inline void recomp_compare(CPUState* cpu, uint8_t left, uint8_t right) {
     cpu_set_flag(cpu, CPU_C, (uint8_t)(left >= right));
     cpu_set_nz(cpu, (uint8_t)(left - right));
 }
-static inline uint8_t recomp_finish_polled(CPUState* cpu, const RuntimeServices* s,
+static inline uint8_t recomp_finish_with_plan(CPUState* cpu, const RuntimeServices* s,
                                     uint8_t bank, uint16_t next_pc,
-                                    uint8_t cycles, uint32_t* remaining, uint8_t irq_mask) {
+                                    uint8_t cycles, uint32_t* remaining, uint8_t irq_mask,
+                                    uint8_t poll_offsets) {
     cpu->PC = next_pc;
     if (s->advance) s->advance(s->context, cycles);
+    if (s->poll_irq) s->poll_irq(s->context, cycles, poll_offsets);
     --*remaining;
     if (s->boundary && s->boundary(s->context, cpu, irq_mask)) return 1;
     return (uint8_t)(*remaining == 0 || s->bank_for_pc(s->context, cpu->PC) != bank);
+}
+static inline uint8_t recomp_finish_polled(CPUState* cpu, const RuntimeServices* s,
+                                    uint8_t bank, uint16_t next_pc,
+                                    uint8_t cycles, uint32_t* remaining, uint8_t irq_mask) {
+    return recomp_finish_with_plan(cpu, s, bank, next_pc, cycles, remaining,
+                                    irq_mask, (uint8_t)(1u << (cycles - 1u)));
 }
 static inline uint8_t recomp_finish(CPUState* cpu, const RuntimeServices* s,
                                     uint8_t bank, uint16_t next_pc,
