@@ -255,8 +255,19 @@ jobs:
           APPIMAGETOOL: /tmp/nes-packaging/appimagetool
           ARCH: x86_64
         run: sh tools/public/package_linux.sh build
+      - name: Verify Linux AppImage on native runner
+        id: package_checks
+        if: ${{ !cancelled() && steps.package.outcome == 'success' }}
+        run: python3 -B tests/linux_appimage_checks.py --build build --output dist --report build/linux-appimage-verification.json
+      - name: Preserve Linux AppImage verification evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage-verification
+          path: build/linux-appimage-verification.json
+          if-no-files-found: warn
       - uses: actions/upload-artifact@v4
-        if: ${{ always() && steps.package.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
           name: frontend-linux-x86_64-AppImage
           path: |
