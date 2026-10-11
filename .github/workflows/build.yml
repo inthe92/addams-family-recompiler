@@ -64,7 +64,15 @@ jobs:
         run: |
           if [ "$(uname -m)" = "arm64" ]; then TARGET=macos-arm64; else TARGET=macos-x86_64; fi
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system "$TARGET"
-          mkdir -p /tmp/nes-smoke
+          mkdir -p /tmp/nes-smoke/game
+          cp -R include /tmp/nes-smoke/include
+          cp -R game/include /tmp/nes-smoke/game/include
+          for header in include/recomp/module_abi.h include/recomp/runtime_services.h include/recomp/cpu_state.h game/include/game/compiled_program.h; do
+            if [ ! -f "/tmp/nes-smoke/$header" ]; then
+              echo "Missing ABI v3 smoke-test header: $header" >&2
+              exit 1
+            fi
+          done
           cp -R tools /tmp/nes-smoke/tools
           cp -R runtime-tools /tmp/nes-smoke/toolchain
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
@@ -186,14 +194,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build g++ python3 libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxinerama-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
       - name: Audit source export
+        id: source_audit
         run: python3 -B tools/public/audit_public.py .
       - name: Build engine without ROM
+        id: build
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
           cmake --build build --parallel 4
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
           python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
-          ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
+      - name: Run complete CTest suite
+        id: ctest
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
@@ -208,14 +221,26 @@ jobs:
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
+        id: toolchain
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
         run: |
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system linux-x86_64
-          mkdir -p /tmp/nes-smoke
+          mkdir -p /tmp/nes-smoke/game
+          cp -R include /tmp/nes-smoke/include
+          cp -R game/include /tmp/nes-smoke/game/include
+          for header in include/recomp/module_abi.h include/recomp/runtime_services.h include/recomp/cpu_state.h game/include/game/compiled_program.h; do
+            if [ ! -f "/tmp/nes-smoke/$header" ]; then
+              echo "Missing ABI v3 smoke-test header: $header" >&2
+              exit 1
+            fi
+          done
           cp -R tools /tmp/nes-smoke/tools
           cp -R runtime-tools /tmp/nes-smoke/toolchain
           runtime-tools/python/bin/python3 -B tests/public_toolchain_smoke.py /tmp/nes-smoke
           runtime-tools/python/bin/python3 -B tests/public_import_process_checks.py /tmp/nes-smoke build/import_probe
       - name: Download official packaging tools
+        id: packaging_tools
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         run: |
           mkdir -p /tmp/nes-packaging
           curl --fail --location https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage -o /tmp/nes-packaging/linuxdeploy
@@ -223,12 +248,15 @@ jobs:
           chmod +x /tmp/nes-packaging/linuxdeploy /tmp/nes-packaging/appimagetool
           sha256sum /tmp/nes-packaging/* > packaging-tools-sha256.txt
       - name: Generate AppImage
+        id: package
+        if: ${{ !cancelled() && steps.toolchain.outcome == 'success' && steps.packaging_tools.outcome == 'success' }}
         env:
           LINUXDEPLOY: /tmp/nes-packaging/linuxdeploy
           APPIMAGETOOL: /tmp/nes-packaging/appimagetool
           ARCH: x86_64
         run: sh tools/public/package_linux.sh build
       - uses: actions/upload-artifact@v4
+        if: ${{ always() && steps.package.outcome == 'success' }}
         with:
           name: frontend-linux-x86_64-AppImage
           path: |
