@@ -1,6 +1,6 @@
 # Windows SDL entrypoint and CI JUnit fixes
 
-Date: **2026-10-11**. Scope: two infrastructure corrections; no production logic, ABI, assertions or dependencies change. A02 remains an enabled, ordinary failing test.
+Date: **2026-10-11**. **Both infrastructure corrections are verified on four native CI hosts.** All default targets compile/link, all four JUnit reports are retained, and each host executes 19 tests: 18 pass, A02 fails, zero are skipped. The complete workflow remains **FAILURE**. No production logic, ABI, assertions or dependencies change.
 
 ## Checkout and starting state
 
@@ -66,10 +66,45 @@ CTest exits **8** for A02; this is not a full-suite success.
 
 ## Published commit and native CI evidence
 
-Pending publication and actual four-host execution at the time of the initial report commit. This section will be updated from the run's actual logs and downloaded XML; no remote success is claimed in advance.
+Published source/configuration commit: **[`fbd42b7aa14a222be105401304b6aea0d2fbc17c`](https://github.com/inthe92/addams-family-recompiler/commit/fbd42b7aa14a222be105401304b6aea0d2fbc17c)**, `Fix Windows SDL test entrypoint and preserve CI JUnit evidence`, on the unchanged work branch. Exactly the three files listed above were included. The final report update follows in a documentation-only commit with `[skip ci]`, avoiding a redundant four-host build of byte-identical tested source. The source run remains failed and is explicitly linked here.
+
+New native **[run 38126149097](https://github.com/inthe92/addams-family-recompiler/actions/runs/38126149097)**, created `2026-10-11T08:49:09Z`, completed with **FAILURE**, at source SHA `fbd42b7aa14a222be105401304b6aea0d2fbc17c`.
+
+| Platform / runner | Compiler | Configure / compile / main link / SDL test link | Executed | Passed | Failed | Omitted/skipped CTest entries | JUnit | Job |
+|---|---|---|---:|---:|---:|---:|---|---|
+| macOS ARM64 / `macos-15`, `arm64` | AppleClang 17.0.0.17000013 | PASS / PASS / PASS / PASS | 19 | 18 | 1 (A02) | 0 | Verified | [Log](https://github.com/inthe92/addams-family-recompiler/actions/runs/38126149097/job/114430817024) |
+| macOS Intel / `macos-15-intel`, `x86_64` | AppleClang 17.0.0.17000013 | PASS / PASS / PASS / PASS | 19 | 18 | 1 (A02) | 0 | Verified | [Log](https://github.com/inthe92/addams-family-recompiler/actions/runs/38126149097/job/114430816914) |
+| Linux x64 / `ubuntu-22.04` | GNU 11.4.0 | PASS / PASS / PASS / PASS | 19 | 18 | 1 (A02) | 0 | Verified | [Log](https://github.com/inthe92/addams-family-recompiler/actions/runs/38126149097/job/114430817080) |
+| Windows x64 / `windows-latest`, MSYS2 UCRT64 | GNU 16.2.0 | PASS / PASS / PASS / PASS | 19 | 18 | 1 (A02) | 0 | Verified | [Log](https://github.com/inthe92/addams-family-recompiler/actions/runs/38126149097/job/114430817154) |
+| **CI total** | — | — | **76** | **72** | **4 (A02)** | **0** | **4/4 retained** | — |
+
+These are native test executions on the four runners, not cross-build claims. **Windows now runs the full suite**, including its SDL dummy queue test; the unresolved `WinMain` link error is gone. Full compilation succeeds; the combined workflow build/test step still has a failing conclusion because CTest returns nonzero for A02.
+
+Every host passes A01, A03 and all eight A03 boundary schedules. Every host reproduces A02 unchanged: cycle 33,252, status `$40`, IRQ after read 0 instead of expected 1. No new platform failure or regression relative to the previously executed hosts was observed.
+
+Each downloaded artifact contains exactly:
+
+```text
+ctest-inventory.json
+ctest-results.xml
+Testing/Temporary/LastTest.log
+```
+
+Artifacts: `ctest-macos-15`, `ctest-macos-15-intel`, `ctest-linux-x64`, `ctest-windows-x64`. All four actual XMLs contain exactly the 19 inventory names, one failure (`apu_status_irq_collision_reference`), and no skipped cases. All 13 mandatory gate entries and their recorded diagnostic counts were checked. Inventories have no disabled/expected-failure/skip exemptions. XML output additionally confirms **4,736 native instruction executions per host (18,944 total)**, two stack programs per host, both `$2002` regressions and the SDL queue case. CPU, RAM, MMC1, bus, PPU, ABI-v2, importer-cache and diagnostic contracts pass.
+
+The new separate JUnit gate runs on every host and **fails as required** on A02. Its existing diagnostic reads `Test did not run: apu_status_irq_collision_reference`, because the verifier expects JUnit `status="run"` whereas CTest encodes this executed failing test as `status="fail"` plus a `<failure>` element. The full logs/XML prove execution; this wording is not evidence of omission. The verifier and its expectations were not changed. Artifact upload succeeds afterward, preserving the failure.
+
+Later importer-toolchain/process and packaging steps remain skipped at workflow level because the test gates fail. This is separate from **zero omitted/skipped CTest entries**. Packaged startup and distribution are not verified by this run. No release/tag was created, main was not changed and no force push was used.
+
+Inspection commands:
+
+```sh
+gh run view 38126149097 --repo inthe92/addams-family-recompiler
+gh run download 38126149097 --repo inthe92/addams-family-recompiler --dir /tmp/nes-ci-fixed-evidence
+```
 
 ## Remaining risks and stopping condition
 
-A02's PAL frame-IRQ/read-clear collision remains unresolved and must remain visible. Broader interrupt/DMA/PPU fidelity, game-route acceptance and packaged imports remain outside this task. No ROM, extracted resource or generated game code is used or published.
+A02's PAL frame-IRQ/read-clear collision remains unresolved and visible on all four platforms. Its correction requires a separate task; full CI is not approved. Broader interrupt/DMA/PPU fidelity, game-route acceptance and packaged imports remain outside this task. No ROM, extracted resource or generated game code is used or published.
 
-If a new platform failure appears, document it without further corrections. Stop after these two infrastructure changes and their evidence report; do not fix A02 or start another phase.
+**No new platform failure was found. These two infrastructure fixes are complete. Work stops after publication of the evidence report; A02 and other engine issues are unchanged.**
