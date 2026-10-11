@@ -4,12 +4,19 @@ on:
   push:
   pull_request:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: Native verification scope (push/PR still run all platforms)
+        type: choice
+        options: [all, windows]
+        default: all
 
 permissions:
   contents: read
 
 jobs:
   macos:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'windows' }}
     strategy:
       fail-fast: false
       matrix:
@@ -167,6 +174,7 @@ jobs:
           if-no-files-found: error
 
   linux:
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform != 'windows' }}
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4

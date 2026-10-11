@@ -357,7 +357,7 @@ def verify(build, output, report_path):
             report['checks'].update(required_files='PASS', zip_crc='PASS', public_content_audit='PASS')
             # Exclude all installed compilers/interpreters/MSYS2 from child PATH.
             env = {key: value for key, value in os.environ.items() if key.upper() not in ('PYTHONPATH', 'PYTHONHOME', 'NES_NATIVE_CC')}
-            env.update(PATH=str(Path(env['SystemRoot']) / 'System32'), PYTHONDONTWRITEBYTECODE='1',
+            env.update(PATH=str(Path(os.environ['SystemRoot']) / 'System32'), PYTHONDONTWRITEBYTECODE='1',
                        ZIG_GLOBAL_CACHE_DIR=str(temp / 'synthetic zig cache'), NES_PACKAGE_TEST_BUILD=str(build),
                        NES_PACKAGE_CHILD_REPORT=str(temp / 'child-report.json'))
             report['child_path'] = env['PATH']; report['extraction_outside_build'] = True
