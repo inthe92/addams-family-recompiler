@@ -121,6 +121,7 @@ def dependency_inventory(resources):
         'pip/_vendor/distlib/t64-arm.exe', 'pip/_vendor/distlib/w64-arm.exe',
         'setuptools/cli-32.exe', 'setuptools/gui-32.exe',
         'setuptools/cli-arm64.exe', 'setuptools/gui-arm64.exe',
+        'setuptools/cli.exe', 'setuptools/gui.exe',
     }
     for file in sorted(resources.rglob('*')):
         if not file.is_file() or file.suffix.lower() not in ('.exe', '.dll', '.pyd'):
