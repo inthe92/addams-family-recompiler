@@ -139,6 +139,7 @@ if(BUILD_TESTING)
   if(NES_ENABLE_DESKTOP)
     add_executable(apu_sdl_queue_checks tests/apu_sdl_queue_checks.cpp)
     target_link_libraries(apu_sdl_queue_checks PRIVATE desktop_presenter)
+    target_compile_definitions(apu_sdl_queue_checks PRIVATE SDL_MAIN_HANDLED=1)
     add_test(NAME apu_sdl_queue_contract COMMAND apu_sdl_queue_checks)
     set_tests_properties(apu_sdl_queue_contract PROPERTIES LABELS "audio;synthetic;sdl" TIMEOUT 30
       ENVIRONMENT "SDL_AUDIODRIVER=dummy")
