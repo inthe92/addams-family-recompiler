@@ -64,6 +64,15 @@ int main(int argc,char** argv) {
             for(unsigned refresh:{60u,120u})for(unsigned i=0;i<refresh;++i)presenter.present(bus.video());
             require(bus.cycles()==cycles&&bus.video().frames()==frames&&bus.audio().cycles()==apu&&bus.video().frame()==source,"presentation advanced CPU/PPU/APU or mutated frame");++cases;
             SDL_SetWindowSize(window,1280,720);verify(false);
+            nes::ui::FrontendUI ui;ui.start(0);
+            int w=0,h=0;SDL_GL_GetDrawableSize(window,&w,&h);auto r=nes::ui::overlay_rect(w,h,false);
+            GLint before[4];glGetIntegerv(GL_VIEWPORT,before);presenter.present_overlay(ui,1);glFinish();
+            GLint after[4];glGetIntegerv(GL_VIEWPORT,after);for(int i=0;i<4;++i)require(before[i]==after[i],"overlay changed NES viewport");
+            require(bus.video().frame()==source&&bus.cycles()==cycles&&bus.audio().cycles()==apu,"overlay changed framebuffer or clock");++cases;
+            ui.handle(nes::ui::Action::request_exit);presenter.present(bus.video());presenter.present_overlay(ui,2);glFinish();
+            const auto modal=nes::ui::overlay_rect(w,h,true);std::array<uint8_t,4> shade{};
+            glReadPixels(modal.x+modal.width/2,h-modal.y-modal.height/2,1,1,GL_RGBA,GL_UNSIGNED_BYTE,shade.data());
+            require(shade[0]<100&&shade[1]<100&&shade[2]<100,"dialog background not drawn");++cases;
             if(argc==2)presenter.capture(argv[1]);
             std::cout<<cases<<" real SDL/OpenGL presentation cases: PASS; OpenGL "<<presenter.version()<<'\n';
         }

@@ -18,6 +18,9 @@ SDLAudioOutput::SDLAudioOutput(bool enabled, bool unthrottled) : unthrottled_(un
 }
 SDLAudioOutput::~SDLAudioOutput() {if (device_) SDL_CloseAudioDevice(device_);}
 uint32_t SDLAudioOutput::queued_bytes() const noexcept {return device_ ? SDL_GetQueuedAudioSize(device_) : 0;}
+void SDLAudioOutput::set_paused(bool value) {
+    if(value==paused_)return;paused_=value;if(device_)SDL_PauseAudioDevice(device_,paused_||!started_?1:0);
+}
 void SDLAudioOutput::submit(const std::vector<float>& samples) {
     if (!device_ || samples.empty()) return;
     // A fast diagnostic can generate many seconds per wall-clock second.
@@ -34,7 +37,7 @@ void SDLAudioOutput::submit(const std::vector<float>& samples) {
     submitted_ += samples.size();
     // Start with two PAL frames queued so the device has room for host jitter.
     if (!started_ && queued_bytes() >= AudioState::sample_rate * sizeof(float) / 25u) {
-        started_ = true; SDL_PauseAudioDevice(device_, 0);
+        started_ = true; SDL_PauseAudioDevice(device_, paused_?1:0);
     }
 }
 }

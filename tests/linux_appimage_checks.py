@@ -19,9 +19,9 @@ from audit_release import audit
 
 def checked_rejection(result, cache):
     log=cache/'import.log'
-    if result.returncode != 1 or 'ROM incompatible:' not in result.stderr or not log.is_file():
+    if result.returncode != 1 or 'Incompatible ROM' not in result.stderr or not log.is_file():
         raise RuntimeError('Expected real incompatible-input rejection (exit 1 and import.log), not a crash/loader failure')
-    if 'ROM incompatible:' not in log.read_text() or list(cache.glob('user_game.*')):
+    if 'Incompatible ROM' not in log.read_text() or list(cache.glob('user_game.*')):
         raise RuntimeError('Unexpected synthetic import log/module output')
     return {'returncode':result.returncode,'stdout':result.stdout,'stderr':result.stderr,
             'import_log':log.read_text(),'mode':'synthetic incompatible input; no real game'}

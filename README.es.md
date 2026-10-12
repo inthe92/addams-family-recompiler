@@ -67,17 +67,18 @@ Los módulos y recursos generados contienen contenido del juego y deben permanec
 | G | Asignar con Steam Input | Cambiar GOD; sólo con `--god` o `--diagnostic` |
 | H | Asignar con Steam Input | Conceder y mantener objetos; sólo con `--god` o `--diagnostic` |
 | F11 | — | Alternar pantalla completa |
-| Escape | — | Cerrar |
+| Escape | Guide, si está disponible | Abrir confirmación de salida |
+| F1 | Y | Ocultar el banner temporal |
 
 GOD protege salud y vidas e intenta recargar la habitación ante ciertas muertes directas. H no es teletransporte. Todavía no están verificadas todas las rutas, combates y recuperaciones ante muerte.
 
-## Presentación original (estado local para 1.0)
+## Beta 0.9.0: interfaz y presentación original
 
 La aplicación comienza en una ventana 960 × 720. Presenta la imagen original completa de 256 × 240 con proporción visual 4:3 y filtrado de vecino más próximo. No extiende habitaciones ni dibuja enemigos fuera de esa imagen. El código panorámico se conserva aislado para investigación y pruebas; no hay una opción para activarlo en la aplicación.
 
 Al redimensionar, se priorizan múltiplos de 320 × 240 (escala vertical entera, píxel NES 5:4). En ventanas pequeñas y en pantalla completa se utiliza el mayor rectángulo 4:3 disponible. Las bandas quedan negras. `--fullscreen` inicia en pantalla completa; F11 permite entrar y salir. La temporización PAL sigue siendo independiente del tamaño y de los Hz de la pantalla.
 
-GOD está desactivado por defecto en esta compilación. `--god` o `--diagnostic` habilitan explícitamente los controles G/H; `--diagnostic --no-god` inicia una sesión normal con registro. Estos cambios locales no actualizan los paquetes alpha publicados anteriormente. Consulta [el informe de verificación](docs/ORIGINAL_PRESENTATION_1_0.md).
+GOD está desactivado por defecto en esta compilación. `--god` o `--diagnostic` habilitan explícitamente los controles G/H; `--diagnostic --no-god` inicia una sesión normal con registro. La interfaz propia de la aplicación está en inglés; el selector de idioma original del juego se conserva. El banner de controles aparece durante 10 segundos reales y se puede ocultar con F1 o Y. Escape, el cierre de ventana y Cmd+Q abren una confirmación con Cancel seleccionado inicialmente. El juego y el audio se pausan mientras el diálogo está abierto; Cancel reanuda sin conservar entradas pulsadas. Los paquetes alpha anteriores no contienen estos cambios. Consulta [el informe de verificación](docs/ORIGINAL_PRESENTATION_1_0.md).
 
 ## Compilar sin ROM
 

@@ -11,6 +11,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    'frontend_ui_banner', 'frontend_ui_quit', 'frontend_ui_bitmap', 'frontend_english_contract', 'frontend_sdl_events', 'frontend_audio_pause',
     'original_presentation_geometry', 'original_presentation_pixels', 'original_presentation_pacing',
     'package_identity_contract',
     'official_icon_assets', 'window_icon_contract',
@@ -30,8 +31,14 @@ REQUIRED = {
     'apu_status_irq_collision_reference', 'apu_frame_mode_delay_reference',
     'apu_frame_mode_edges_contract', 'apu_sdl_queue_contract',
 }
-DESKTOP_ONLY = {'module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
+DESKTOP_ONLY = {'frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    'frontend_ui_banner': r'Frontend banner cases=9 PASS',
+    'frontend_ui_quit': r'Frontend quit cases=18 PASS',
+    'frontend_ui_bitmap': r'Frontend bitmap cases=8 PASS',
+    'frontend_english_contract': r'Ran 6 tests\b',
+    'frontend_sdl_events': r'Frontend SDL event cases=13 PASS',
+    'frontend_audio_pause': r'Frontend SDL audio cases=2 PASS',
     'original_presentation_geometry': r'18 original presentation geometry cases: PASS',
     'original_presentation_pixels': r'7 original presentation pixels cases: PASS',
     'original_presentation_pacing': r'7 original presentation pacing cases: PASS',

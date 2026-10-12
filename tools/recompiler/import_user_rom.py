@@ -35,19 +35,19 @@ def native_compiler(headers):
         flags=['-ffreestanding','-nostdlib'] if triple.endswith('-macos') else []
         return [str(bundled),'cc','-target',triple,*flags]
     compiler = os.environ.get('NES_NATIVE_CC') or (shutil.which('gcc') if os.name=='nt' else shutil.which('clang')) or shutil.which('gcc')
-    if not compiler:raise RuntimeError('Falta un compilador C. Consulta README: importacion local.')
+    if not compiler:raise RuntimeError('No C compiler found. See the local import instructions.')
     return [compiler]
 
 def validate_rom(path, profile):
     # Check size before allocating, then authenticate the whole image before
     # decoding, invoking a compiler, or replacing an existing local import.
     if path.stat().st_size != profile['rom_size']:
-        raise ValueError('ROM incompatible: se requiere la revision europea En/Fr/De verificada.')
+        raise ValueError('Incompatible ROM. This version requires the supported European PAL release (En/Fr/De).')
     image = path.read_bytes()
     if digest(image) != profile['rom_sha256']:
-        raise ValueError('ROM incompatible: SHA-256 distinto. No se modifica ni parchea la ROM.')
+        raise ValueError('Incompatible ROM: SHA-256 mismatch. The ROM has not been modified or patched.')
     if image[:4] != b'NES\x1a' or image[4:6] != bytes([8,16]) or (image[6] >> 4 | image[7] & 0xf0) != 1:
-        raise ValueError('Cabecera iNES/MMC1 incompatible.')
+        raise ValueError('Incompatible iNES/MMC1 header.')
     return image
 
 def emit_resources(image, target):
@@ -96,7 +96,7 @@ def import_rom(rom, cache, include_root=None):
         prior = json.loads(receipt.read_text())
         if (prior.get('abi_version') == abi_version and prior.get('generator_sha256') == identity
                 and prior.get('module_sha256') == digest(module.read_bytes())):
-            print('Importacion local existente validada.', flush=True)
+            print('Existing local game import verified.', flush=True)
             return module
     compiler=native_compiler(headers)
     # Only temporary generated files and the user's own cache contain ROM data.
@@ -109,16 +109,16 @@ def import_rom(rom, cache, include_root=None):
             for pc in starts:
                 offset = bank*16384 + pc-(0xc000 if bank==7 else 0x8000)
                 opcode = prg[offset]
-                if opcode not in OPCODES: raise ValueError('Opcode incompatible en perfil de instrucciones.')
+                if opcode not in OPCODES: raise ValueError('Incompatible opcode in the supported instruction profile.')
                 instructions.append(dict(pc=pc,size=SIZES[OPCODES[opcode][1]],tier='profile_location'))
             banks.append(dict(instruction_evidence=instructions))
-        print('Generando funciones C y recursos a partir de tu ROM...',flush=True)
+        print('Preparing your game: generating native C from your ROM...',flush=True)
         emit_program(image,dict(banks=banks),work/'program',digest(profile_bytes))
         emit_maps(image,work/'world')
         emit_resources(image,work/'resources.c')
         sources = sorted((work/'program').glob('*.c'))+[work/'world/world_maps.c',work/'resources.c']
         includes = [arg for path in include_paths for arg in ('-I',str(path))]
-        print('Compilando modulo nativo local. La primera importacion puede tardar varios minutos.',flush=True)
+        print('Compiling game code. This may take a few minutes...',flush=True)
         def compile_file(source):
             obj = work/(source.stem+'.o')
             subprocess.run([*compiler,'-std=c99','-O1','-fPIC',*includes,'-c',str(source),'-o',str(obj)],check=True,stdout=sys.stdout,stderr=sys.stderr)
@@ -139,7 +139,7 @@ def import_rom(rom, cache, include_root=None):
         next_receipt = work/'import.json'
         next_receipt.write_text(json.dumps(local_receipt,indent=2)+'\n')
         os.replace(next_receipt,receipt)
-    print('Importacion completa: '+str(module),flush=True)
+    print('Local import complete: '+str(module),flush=True)
     return module
 
 def main():
@@ -157,7 +157,7 @@ def main():
     try:
         if args.validate_only:
             validate_rom(args.rom,json.loads((HERE/'compatible_profile.json').read_text()))
-            print('ROM compatible; no se ha generado ni copiado contenido.')
+            print('Compatible ROM verified; no game content was generated or copied.')
         else: import_rom(args.rom,args.cache,args.include_root)
     except (OSError,ValueError,RuntimeError,subprocess.CalledProcessError) as error:
         parser.exit(1,str(error)+'\n')

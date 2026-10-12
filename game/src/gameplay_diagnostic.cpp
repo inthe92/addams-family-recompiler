@@ -1,4 +1,6 @@
 #include "game/gameplay_diagnostic.hpp"
+#include "runtime/app_version.hpp"
+#include "recomp/module_abi.h"
 #include <chrono>
 #include <ostream>
 #include <stdexcept>
@@ -65,7 +67,7 @@ void GameplayDiagnostic::flush() noexcept {
 void GameplayDiagnostic::begin(std::ostream& output,bool god,bool items,bool mods) {
     if(started_)throw std::logic_error("Diagnostic session already started");
     output_=&output;started_=true;
-    event("session_start",",\"app_version\":\"0.2.1\",\"abi\":2");
+    event("session_start",std::string(",\"app_version\":\"")+nes::app::version+"\",\"abi\":"+number(NES_RECOMP_ABI_VERSION));
     assistance(god,items,mods);
 }
 void GameplayDiagnostic::assistance(bool god,bool items,bool mods) {

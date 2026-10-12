@@ -15,7 +15,7 @@ template<class T> static T gl_function(const char* name) {
 }
 struct GLPresenter::Impl {
     SDL_Window* window;
-    GLuint program{}, texture{}, vao{}, buffer{};
+    GLuint program{}, texture{}, vao{}, buffer{}, ui_texture{}, ui_vao{}, ui_buffer{};
     PFNGLCREATESHADERPROC create_shader = gl_function<PFNGLCREATESHADERPROC>("glCreateShader");
     PFNGLSHADERSOURCEPROC shader_source = gl_function<PFNGLSHADERSOURCEPROC>("glShaderSource");
     PFNGLCOMPILESHADERPROC compile_shader = gl_function<PFNGLCOMPILESHADERPROC>("glCompileShader");
@@ -47,6 +47,7 @@ struct GLPresenter::Impl {
         return result;
     }
     ~Impl() {
+        if(ui_buffer)delete_buffers(1,&ui_buffer);if(ui_vao)delete_vaos(1,&ui_vao);if(ui_texture)glDeleteTextures(1,&ui_texture);
         if(buffer)delete_buffers(1,&buffer);if(vao)delete_vaos(1,&vao);
         if(texture)glDeleteTextures(1,&texture);if(program)delete_program(program);
     }
@@ -70,6 +71,14 @@ GLPresenter::GLPresenter(SDL_Window* window) : impl_(std::make_unique<Impl>(wind
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,256,240,0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
+    g.gen_vaos(1,&g.ui_vao);g.bind_vao(g.ui_vao);g.gen_buffers(1,&g.ui_buffer);g.bind_buffer(GL_ARRAY_BUFFER,g.ui_buffer);
+    g.buffer_data(GL_ARRAY_BUFFER,sizeof vertices,vertices,GL_DYNAMIC_DRAW);
+    g.vertex_pointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),nullptr);
+    g.vertex_pointer(1,2,GL_FLOAT,GL_FALSE,4*sizeof(float),reinterpret_cast<void*>(2*sizeof(float)));
+    g.enable_attribute(0);g.enable_attribute(1);
+    glGenTextures(1,&g.ui_texture);glBindTexture(GL_TEXTURE_2D,g.ui_texture);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
 }
 GLPresenter::~GLPresenter()=default;
 const char* GLPresenter::version() const { return reinterpret_cast<const char*>(glGetString(GL_VERSION)); }
@@ -89,6 +98,20 @@ void GLPresenter::present(const uint8_t* indices,unsigned image_width,unsigned i
     glTexSubImage2D(GL_TEXTURE_2D,0,0,0,static_cast<GLsizei>(image_width),static_cast<GLsizei>(image_height),GL_RGBA,GL_UNSIGNED_BYTE,g.rgba.data());
     glDrawArrays(GL_TRIANGLES,0,6);
     if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL presentation failed");
+}
+void GLPresenter::present_overlay(const nes::ui::FrontendUI& ui,double now) {
+    const auto bitmap=nes::ui::overlay_bitmap(ui,now);if(!bitmap.width)return;
+    auto& g=*impl_;int w=0,h=0;SDL_GL_GetDrawableSize(g.window,&w,&h);if(w<=0||h<=0)return;
+    const auto r=nes::ui::overlay_rect(w,h,ui.modal());
+    const float left=2.0f*r.x/w-1,right=2.0f*(r.x+r.width)/w-1;
+    const float top=1-2.0f*r.y/h,bottom=1-2.0f*(r.y+r.height)/h;
+    const float v[]={left,bottom,0,1,right,bottom,1,1,right,top,1,0,left,bottom,0,1,right,top,1,0,left,top,0,0};
+    GLint old_viewport[4];glGetIntegerv(GL_VIEWPORT,old_viewport);glViewport(0,0,w,h);
+    g.use_program(g.program);g.bind_vao(g.ui_vao);g.bind_buffer(GL_ARRAY_BUFFER,g.ui_buffer);g.buffer_data(GL_ARRAY_BUFFER,sizeof v,v,GL_DYNAMIC_DRAW);
+    glBindTexture(GL_TEXTURE_2D,g.ui_texture);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,bitmap.width,bitmap.height,0,GL_RGBA,GL_UNSIGNED_BYTE,bitmap.rgba.data());
+    glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDrawArrays(GL_TRIANGLES,0,6);glDisable(GL_BLEND);
+    glViewport(old_viewport[0],old_viewport[1],old_viewport[2],old_viewport[3]);
+    if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL UI overlay failed");
 }
 void GLPresenter::capture(const std::string& path) {
     int width=0,height=0;SDL_GL_GetDrawableSize(impl_->window,&width,&height);

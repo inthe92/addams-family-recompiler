@@ -22,6 +22,12 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            'frontend_ui_banner': 'Frontend banner cases=9 PASS',
+            'frontend_ui_quit': 'Frontend quit cases=18 PASS',
+            'frontend_ui_bitmap': 'Frontend bitmap cases=8 PASS',
+            'frontend_english_contract': 'Ran 6 tests',
+            'frontend_sdl_events': 'Frontend SDL event cases=13 PASS',
+            'frontend_audio_pause': 'Frontend SDL audio cases=2 PASS',
             'original_presentation_geometry': '18 original presentation geometry cases: PASS',
             'original_presentation_pixels': '7 original presentation pixels cases: PASS',
             'original_presentation_pacing': '7 original presentation pacing cases: PASS',

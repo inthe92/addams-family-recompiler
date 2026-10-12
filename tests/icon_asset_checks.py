@@ -109,7 +109,7 @@ class IconChecks(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='icon Linux package ') as name:
             root = Path(name); build = root/'build'; build.mkdir(); (build/'nes_native').write_bytes(b'synthetic fixture')
             tools = root/'toolchain'; tools.mkdir(); (tools/'target.json').write_text(json.dumps({'system':'linux-x86_64'}))
-            build_identity.generate(build,'0.2.1','Linux','x86_64')
+            build_identity.generate(build,build_identity.current()['version'],'Linux','x86_64')
             appdir = packaging.package(build, root/'dist', tools, 'Linux', 'x86_64')
             icons.verify_linux(appdir)
             with self.assertRaisesRegex(ValueError,'already exists'):

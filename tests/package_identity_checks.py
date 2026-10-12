@@ -17,8 +17,8 @@ from linux_appimage_checks import checked_rejection
 class IdentityChecks(unittest.TestCase):
     def test_linux_crash_cannot_pass_as_import_rejection(self):
         with tempfile.TemporaryDirectory() as directory:
-            cache=Path(directory);log=cache/'import.log';log.write_text('ROM incompatible: synthetic fixture\n')
-            ok=subprocess.CompletedProcess([],1,'','ROM incompatible: synthetic fixture')
+            cache=Path(directory);log=cache/'import.log';log.write_text('Incompatible ROM: synthetic fixture\n')
+            ok=subprocess.CompletedProcess([],1,'','Incompatible ROM: synthetic fixture')
             checked_rejection(ok,cache)
             for status in [-11,0,2,139]:
                 with self.subTest(status=status),self.assertRaises(RuntimeError):

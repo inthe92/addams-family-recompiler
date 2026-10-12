@@ -1,0 +1,2 @@
+#pragma once
+namespace nes::app { inline constexpr const char* version = "@PROJECT_VERSION@-beta"; }

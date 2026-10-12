@@ -246,8 +246,8 @@ def frontend_check(resources, directory, invalid=False):
         deadline = time.monotonic() + 40
         while process.poll() is None and time.monotonic() < deadline:
             observed = windows_for_pid(process.pid)
-            match = next((item for item in observed if ('SHA-256 distinto' in item['text'] if invalid
-                         else 'Importa tu ROM compatible' in item['title'])), None)
+            match = next((item for item in observed if ('SHA-256 mismatch' in item['text'] if invalid
+                         else 'Select your NES ROM' in item['title'])), None)
             if match:
                 _, _, user = windows_api()
                 # OK for the real error box; WM_CLOSE cancels the native picker.
@@ -259,7 +259,7 @@ def frontend_check(resources, directory, invalid=False):
                     raise AssertionError('Frontend exit: ' + str(process.returncode) + ': ' + repr(error))
                 if invalid:
                     log = cache / 'import.log'
-                    if not log.is_file() or 'SHA-256 distinto' not in log.read_text(encoding='utf-8'):
+                    if not log.is_file() or 'SHA-256 mismatch' not in log.read_text(encoding='utf-8'):
                         raise AssertionError('Missing real frontend import diagnostic')
                     if list(cache.glob('user_game.*')):
                         raise AssertionError('Invalid image produced a game module')

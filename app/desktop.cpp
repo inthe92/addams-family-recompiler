@@ -5,6 +5,8 @@
 #include "runtime/bus.hpp"
 #include "runtime/gl_presenter.hpp"
 #include "runtime/original_presentation.hpp"
+#include "runtime/frontend_events.hpp"
+#include "runtime/ui_text.hpp"
 #include "runtime/sdl_audio_output.hpp"
 #include "runtime/wav_writer.hpp"
 #include "runtime/application_icon.hpp"
@@ -27,24 +29,10 @@ struct GLContext {SDL_GLContext value{};~GLContext(){if(value)SDL_GL_DeleteConte
 struct Controller {SDL_GameController* value{};~Controller(){if(value)SDL_GameControllerClose(value);} };
 static void show_error(const std::string& message) {
     std::cerr << message << '\n';
-#ifdef NES_ALPHA_BUILD
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Addams Family — Alpha 0.2.1",
-        ("La alfa se ha detenido.\n\n" + message +
-         "\n\nEsta version es parcial; el juego completo sigue en desarrollo.").c_str(), nullptr);
+#ifdef NES_BETA_BUILD
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, nes::ui::text::name,
+        (std::string(nes::ui::text::load_error)+"\n\n"+message+"\n\n"+nes::ui::text::experimental).c_str(), nullptr);
 #endif
-}
-static uint8_t buttons(SDL_GameController* pad) {
-    const auto* keys=SDL_GetKeyboardState(nullptr);uint8_t value=0;
-    const struct { SDL_Scancode key; SDL_GameControllerButton button; uint8_t mask; } map[]={
-        {SDL_SCANCODE_Z,SDL_CONTROLLER_BUTTON_A,1},{SDL_SCANCODE_X,SDL_CONTROLLER_BUTTON_B,2},
-        {SDL_SCANCODE_RSHIFT,SDL_CONTROLLER_BUTTON_BACK,4},{SDL_SCANCODE_RETURN,SDL_CONTROLLER_BUTTON_START,8},
-        {SDL_SCANCODE_UP,SDL_CONTROLLER_BUTTON_DPAD_UP,16},{SDL_SCANCODE_DOWN,SDL_CONTROLLER_BUTTON_DPAD_DOWN,32},
-        {SDL_SCANCODE_LEFT,SDL_CONTROLLER_BUTTON_DPAD_LEFT,64},{SDL_SCANCODE_RIGHT,SDL_CONTROLLER_BUTTON_DPAD_RIGHT,128}};
-    for(const auto& binding:map)if(keys[binding.key]||(pad&&SDL_GameControllerGetButton(pad,binding.button)))value=static_cast<uint8_t>(value|binding.mask);
-    if(pad){const Sint16 x=SDL_GameControllerGetAxis(pad,SDL_CONTROLLER_AXIS_LEFTX),y=SDL_GameControllerGetAxis(pad,SDL_CONTROLLER_AXIS_LEFTY);
-        if(x<-16000)value=static_cast<uint8_t>(value|64u);if(x>16000)value=static_cast<uint8_t>(value|128u);
-        if(y<-16000)value=static_cast<uint8_t>(value|16u);if(y>16000)value=static_cast<uint8_t>(value|32u);}
-    return value;
 }
 int main(int argc,char** argv) {
  std::ofstream diagnostic_output;
@@ -93,11 +81,8 @@ int main(int argc,char** argv) {
     if(SDL_Init(SDL_INIT_VIDEO|SDL_INIT_GAMECONTROLLER|SDL_INIT_EVENTS)!=0)throw std::runtime_error(SDL_GetError());SDLQuit quit;
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,2);
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
-    const char* title="The Addams Family — Native";
-#ifdef NES_ALPHA_BUILD
-    title="Addams Family — Alpha 0.2.1 · Enter: empezar · Z/X";
-#endif
-    auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,720,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
+    const std::string title=std::string(nes::ui::text::name)+" "+nes::app::version;
+    auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title.c_str(),SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,720,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
     if(!window)throw std::runtime_error(SDL_GetError());
     nes::runtime::set_application_icon(window.get());
     GLContext context{SDL_GL_CreateContext(window.get())};
@@ -113,14 +98,7 @@ int main(int argc,char** argv) {
     services=diagnostic.services(bus,services,cpu);
     const bool debug_controls=god_enabled||diagnostic_requested;
     const auto update_title=[&]{
-        const std::string caption=std::string("Addams Family — ")+
-#ifdef NES_ALPHA_BUILD
-            "Alpha 0.2.1 · "+
-#else
-            "Native · "+
-#endif
-            "4:3 · Enter · Flechas · Z/X · F11: pantalla completa"+
-            (debug_controls?std::string(" · G: GOD · H: objetos")+(god.enabled()?" · GOD activo":" · GOD desactivado")+(god.all_items()?" · OBJETOS completos":""):std::string());
+        const std::string caption=title+(god.enabled()?" - GOD enabled":"")+(god.all_items()?" - All items enabled":"");
         SDL_SetWindowTitle(window.get(),caption.c_str());
     };
     update_title();
@@ -136,12 +114,19 @@ int main(int argc,char** argv) {
     Controller controller;for(int i=0;i<SDL_NumJoysticks();++i)if(SDL_IsGameController(i)){controller.value=SDL_GameControllerOpen(i);break;}
     bool running=true;const Uint64 frequency=SDL_GetPerformanceFrequency();
     double next_deadline=static_cast<double>(SDL_GetPerformanceCounter());
-    uint64_t presented=0;
+    uint64_t presented=0;bool frontend_paused=false;
+    nes::ui::FrontendUI ui;nes::ui::FrontendEvents ui_events(ui);
+    const auto seconds=[&]{return static_cast<double>(SDL_GetPerformanceCounter())/frequency;};
+
     while(running&&(!limit||presented<limit)) {
+        ui.begin_events();
+        int ww=0,wh=0,dw=0,dh=0;SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
         SDL_Event event;while(SDL_PollEvent(&event)) {
-            if(event.type==SDL_QUIT||(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_ESCAPE))running=false;
-            if(debug_controls&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
-            if(debug_controls&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
+            const auto modal_keys=nes::ui::modal_pressed_count(SDL_GetKeyboardState(nullptr),controller.value);
+            ui_events.handle(event,ww,wh,dw,dh,modal_keys>1||(event.type==SDL_MOUSEBUTTONUP&&modal_keys>0));
+            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
             if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_F11){
                 const Uint32 flag=(SDL_GetWindowFlags(window.get())&SDL_WINDOW_FULLSCREEN)?0:SDL_WINDOW_FULLSCREEN_DESKTOP;
                 if(SDL_SetWindowFullscreen(window.get(),flag)!=0)throw std::runtime_error(SDL_GetError());
@@ -149,8 +134,17 @@ int main(int argc,char** argv) {
             if(event.type==SDL_CONTROLLERDEVICEADDED&&!controller.value)controller.value=SDL_GameControllerOpen(event.cdevice.which);
             if(event.type==SDL_CONTROLLERDEVICEREMOVED&&controller.value&&SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller.value))==event.cdevice.which){SDL_GameControllerClose(controller.value);controller.value=nullptr;}
         }
-        if(!running)break;
-        bus.set_buttons(0,buttons(controller.value));
+        ui.observe_neutral(nes::ui::modal_controls_idle(SDL_GetKeyboardState(nullptr),controller.value),nes::ui::all_controls_idle(SDL_GetKeyboardState(nullptr),controller.value));
+        if(ui.quit_requested())break;
+        audio_output.set_paused(ui.paused());
+        if(frontend_paused!=ui.paused()) {
+            frontend_paused=ui.paused();std::cout<<(frontend_paused?"Gameplay paused":"Gameplay resumed")<<"; CPU cycle="<<bus.cycles()<<"; PPU frame="<<bus.video().frames()<<"; audio_paused="<<audio_output.paused()<<'\n'<<std::flush;
+        }
+        if(ui.paused()) {
+            bus.set_buttons(0,0);presenter.present(bus.video());presenter.present_overlay(ui,seconds());
+            SDL_GL_SwapWindow(window.get());next_deadline=static_cast<double>(SDL_GetPerformanceCounter());SDL_Delay(10);continue;
+        }
+        bus.set_buttons(0,ui.game_input_enabled()?nes::ui::game_buttons(SDL_GetKeyboardState(nullptr),controller.value):0);
 #ifdef NES_ENABLE_MODS
         mods.frame(cpu);
 #endif
@@ -159,13 +153,14 @@ int main(int argc,char** argv) {
         while(bus.video().frames()==before) {
             uint32_t budget=1000;if(!game_execute_slice(&cpu,&services,&budget)){
                 diagnostic.missing_address(cpu);diagnostic.end("uncovered_address");
-                show_error("Falta una rutina nativa: banco "+std::to_string(bus.cartridge().bank_for_pc(cpu.PC))+", PC decimal "+std::to_string(cpu.PC));return 2;}
+                show_error("Uncovered native routine: bank "+std::to_string(bus.cartridge().bank_for_pc(cpu.PC))+", PC "+std::to_string(cpu.PC));return 2;}
             diagnostic.slice(cpu);
         }
         diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());
         if(diagnostic.failed()&&diagnostic_requested){std::cerr<<"Gameplay diagnostic stopped: output write failed; session evidence is incomplete\n";diagnostic_requested=false;}
         bus.video().consume_frame();auto samples=bus.audio().take_samples();audio_output.submit(samples);if(wav)wav->append(samples);
-        presenter.present(bus.video());++presented;
+        if(!presented)ui.start(seconds());
+        presenter.present(bus.video());presenter.present_overlay(ui,seconds());++presented;
         if(limit&&presented==limit&&!capture.empty())presenter.capture(capture);
         SDL_GL_SwapWindow(window.get());
         if(!fast){

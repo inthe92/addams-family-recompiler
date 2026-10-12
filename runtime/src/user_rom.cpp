@@ -1,6 +1,8 @@
 #include "runtime/user_rom.hpp"
 #include "runtime/module_abi.hpp"
 #include "runtime/application_icon.hpp"
+#include "runtime/frontend_ui.hpp"
+#include "runtime/ui_text.hpp"
 #include "game/compiled_program.h"
 #include "game/recovered_resources.h"
 #include "game/world_maps.h"
@@ -42,6 +44,11 @@ const GameWorldEdit* imported_level13_edits=nullptr;
 namespace nes::runtime {
 namespace {
 namespace fs=std::filesystem;
+void show_prompt(SDL_Window* window,const char* title,const char* message){
+    auto bitmap=nes::ui::prompt_bitmap(title,message);auto* target=SDL_GetWindowSurface(window);if(!target)return;
+    auto* source=SDL_CreateRGBSurfaceWithFormatFrom(bitmap.rgba.data(),bitmap.width,bitmap.height,32,bitmap.width*4,SDL_PIXELFORMAT_RGBA32);
+    if(source){SDL_FillRect(target,nullptr,SDL_MapRGB(target->format,12,16,24));SDL_Rect dest{0,(target->h-int(bitmap.height))/2,int(bitmap.width),int(bitmap.height)};SDL_BlitSurface(source,nullptr,target,&dest);SDL_FreeSurface(source);SDL_UpdateWindowSurface(window);}
+}
 int run_python(const std::vector<std::string>& arguments,const fs::path& log) {
 #ifdef _WIN32
     // CreateProcess takes a command line, not argv. Quote each argument using
@@ -61,7 +68,7 @@ int run_python(const std::vector<std::string>& arguments,const fs::path& log) {
     SECURITY_ATTRIBUTES security{sizeof(SECURITY_ATTRIBUTES),nullptr,TRUE};
     HANDLE output=CreateFileW(log.c_str(),GENERIC_WRITE,FILE_SHARE_READ|FILE_SHARE_WRITE,
         &security,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,nullptr);
-    if(output==INVALID_HANDLE_VALUE)throw std::runtime_error("No se puede crear el registro: "+log.u8string());
+    if(output==INVALID_HANDLE_VALUE)throw std::runtime_error("Unable to create diagnostic log: "+log.u8string());
     const auto failed=[&](DWORD error) {
         const std::string message="Python launch failed (Windows error "+std::to_string(error)+").\n";
         DWORD written=0;WriteFile(output,message.data(),static_cast<DWORD>(message.size()),&written,nullptr);
@@ -115,32 +122,29 @@ std::string choose_rom() {
 #elif defined(_WIN32)
     wchar_t file[32768]{};
     OPENFILENAMEW panel{};panel.lStructSize=sizeof(panel);panel.lpstrFile=file;panel.nMaxFile=32768;
-    panel.lpstrTitle=L"Importa tu ROM compatible";
+    panel.lpstrTitle=nes::ui::text::select_rom_w;
     panel.lpstrFilter=L"NES ROM\0*.nes\0All files\0*.*\0";
     panel.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_NOCHANGEDIR;
     return GetOpenFileNameW(&panel)?fs::path(file).u8string():std::string{};
 #else
     // No desktop-specific file-picker dependency is needed in the AppImage.
     if(SDL_Init(SDL_INIT_VIDEO)!=0)throw std::runtime_error(SDL_GetError());
-    auto* window=SDL_CreateWindow("Arrastra tu archivo .nes aqui para importarlo",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,240,0);
+    auto* window=SDL_CreateWindow(nes::ui::text::drop_title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,240,0);
     if(!window){SDL_Quit();throw std::runtime_error(SDL_GetError());}
     set_application_icon(window);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,"Importar ROM",
-        "Esta aplicacion no incluye el juego.\n\nArrastra tu ROM .nes a esta ventana.\nTambien puedes ejecutarla con --rom /ruta/juego.nes.\n\nPython y el compilador estan incluidos en este paquete.",window);
-    auto* surface=SDL_GetWindowSurface(window);
-    if(surface){SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,24,32,50));SDL_UpdateWindowSurface(window);}
+    show_prompt(window,nes::ui::text::select_rom,nes::ui::text::drop_help);
     std::string selected;SDL_Event event{};bool running=true;
     SDL_EventState(SDL_DROPFILE,SDL_ENABLE);
     while(running&&SDL_WaitEvent(&event)) {
         if(event.type==SDL_DROPFILE){selected=event.drop.file;SDL_free(event.drop.file);running=false;}
-        if(event.type==SDL_QUIT)running=false;
+        if(event.type==SDL_QUIT||(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_ESCAPE))running=false;
     }
     SDL_DestroyWindow(window);SDL_Quit();return selected;
 #endif
 }
 void* symbol(void* module,const char* name) {
     auto* result=SDL_LoadFunction(module,name);
-    if(!result)throw std::runtime_error(std::string("Modulo local incompleto: ")+name);
+    if(!result)throw std::runtime_error(std::string("Incomplete local game module: ")+name);
     return result;
 }
 }
@@ -150,7 +154,7 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
         const std::string arg=argv[i];
         if(arg=="--import-only"){import_only=true;continue;}
         if(arg=="--rom"||arg=="--import-cache"||arg=="--import-tools") {
-            if(++i>=argc)throw std::invalid_argument("Falta el valor de "+arg);
+            if(++i>=argc)throw std::invalid_argument("Missing value for "+arg);
             if(arg=="--rom")rom=fs::u8path(argv[i]);
             else if(arg=="--import-cache")cache=fs::u8path(argv[i]);
             else tools=fs::u8path(argv[i]);
@@ -192,18 +196,32 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
         "--rom",fs::absolute(rom).u8string(),"--cache",fs::absolute(cache).u8string()},log);});
     SDL_Window* progress=nullptr;
     if(interactive&&!import_only&&SDL_Init(SDL_INIT_VIDEO)==0) {
-        progress=SDL_CreateWindow("Importando ROM... primera compilacion: varios minutos",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,180,0);
-        if(progress){set_application_icon(progress);auto* surface=SDL_GetWindowSurface(progress);if(surface){SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,24,32,50));SDL_UpdateWindowSurface(progress);}}
+        progress=SDL_CreateWindow(nes::ui::text::preparing,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,180,0);
+        if(progress){set_application_icon(progress);show_prompt(progress,nes::ui::text::preparing,nes::ui::text::preparing_help);}
     }
+    bool close_after_import=false,compiling_shown=false;
     while(task.wait_for(std::chrono::milliseconds(25))!=std::future_status::ready) {
-        if(progress){SDL_Event event{};while(SDL_PollEvent(&event)){};SDL_UpdateWindowSurface(progress);}
+        if(progress){
+            SDL_Event event{};while(SDL_PollEvent(&event))if(!close_after_import&&(event.type==SDL_QUIT||(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_ESCAPE&&!event.key.repeat))){
+                const SDL_MessageBoxButtonData buttons[]={
+                    {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT|SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT,0,nes::ui::text::cancel},
+                    {0,1,nes::ui::text::exit_game}};
+                const SDL_MessageBoxData box{SDL_MESSAGEBOX_WARNING,progress,nes::ui::text::quit_title,
+                    "Local compilation will finish safely before the application closes.",2,buttons,nullptr};
+                int selected=0;if(SDL_ShowMessageBox(&box,&selected)==0&&selected==1){close_after_import=true;SDL_SetWindowTitle(progress,"Finishing preparation before closing...");}
+            }
+            if(!compiling_shown&&!close_after_import){std::ifstream input(log);const std::string content((std::istreambuf_iterator<char>(input)),{});
+                if(content.find("Compiling game code")!=std::string::npos){compiling_shown=true;SDL_SetWindowTitle(progress,nes::ui::text::compiling);show_prompt(progress,nes::ui::text::preparing,nes::ui::text::compiling);}}
+            SDL_UpdateWindowSurface(progress);
+        }
     }
     if(progress){SDL_DestroyWindow(progress);SDL_Quit();}
     const int result=task.get();
+    if(close_after_import)return false;
     if(result!=0) {
         std::ifstream input(log);std::string details((std::istreambuf_iterator<char>(input)),{});
         if(details.size()>2500)details=details.substr(details.size()-2500);
-        throw std::runtime_error("No se ha podido importar tu ROM.\nConsulta el registro de importacion.\n"+details+"\nRegistro: "+log.u8string());
+        throw std::runtime_error(std::string(nes::ui::text::load_error)+"\n"+details+"\nDiagnostic log: "+log.u8string());
     }
     std::ofstream(remembered)<<fs::absolute(rom).u8string()<<'\n';
     if(import_only)return false;

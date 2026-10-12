@@ -11,6 +11,8 @@ public:
     ~SDLAudioOutput();
     SDLAudioOutput(const SDLAudioOutput&) = delete;
     SDLAudioOutput& operator=(const SDLAudioOutput&) = delete;
+    void set_paused(bool paused);
+    bool paused() const noexcept { return paused_; }
     void submit(const std::vector<float>& samples);
     bool available() const noexcept { return device_ != 0; }
     uint64_t submitted_samples() const noexcept { return submitted_; }
@@ -19,7 +21,7 @@ public:
 private:
     SDL_AudioDeviceID device_{};
     uint64_t submitted_{}, skipped_{};
-    bool started_{};
+    bool started_{}, paused_{};
     bool unthrottled_{};
 };
 }

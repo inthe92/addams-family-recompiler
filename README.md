@@ -67,17 +67,18 @@ Generated modules and resources contain game content and must remain private. Do
 | G | Assign with Steam Input | Toggle GOD; only with `--god` or `--diagnostic` |
 | H | Assign with Steam Input | Grant and retain inventory; only with `--god` or `--diagnostic` |
 | F11 | — | Toggle fullscreen |
-| Escape | — | Close |
+| Escape | Guide, if available | Open exit confirmation |
+| F1 | Y | Hide temporary controls banner |
 
 GOD protects health/lives and attempts a room reload for some direct deaths. H is not teleportation. All routes, battles and death recovery cases are not yet verified.
 
-## Original presentation (local preparation for 1.0)
+## Beta 0.9.0: interface and original presentation
 
 The application starts in a 960 × 720 window. It displays the entire original 256 × 240 frame at a visual 4:3 aspect ratio using nearest-neighbor filtering. It does not extend rooms or draw enemies outside that frame. Widescreen sources remain isolated for research and existing tests; the application has no switch to enable them.
 
 Resizing prefers multiples of 320 × 240 (integer vertical scaling, 5:4 NES pixel aspect). Small windows and fullscreen use the largest fitting 4:3 rectangle, surrounded by black bars. `--fullscreen` starts fullscreen; F11 enters/exits it. PAL timing remains independent of window size and display refresh.
 
-GOD is off by default in this build. `--god` or `--diagnostic` explicitly enable G/H debug controls; `--diagnostic --no-god` starts normal gameplay with logging. These local changes do not update previously published alpha packages. See [the verification report](docs/ORIGINAL_PRESENTATION_1_0.md).
+GOD is off by default in this build. `--god` or `--diagnostic` explicitly enable G/H debug controls; `--diagnostic --no-god` starts normal gameplay with logging. The application interface is in English; the original game language selector is preserved. Controls appear in a banner for 10 real seconds; F1 or gamepad Y dismisses it. Escape, normal window close and Cmd+Q open an exit confirmation with Cancel selected by default. Gameplay and device audio pause during the dialog; Cancel resumes with held inputs gated until release. Previous alpha packages do not contain these changes. See [the verification report](docs/ORIGINAL_PRESENTATION_1_0.md).
 
 ## Build without a ROM
 

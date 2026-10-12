@@ -4,7 +4,7 @@ Fecha de auditoría: 2026-10-12. Este documento resume el checkout actual; los i
 
 ## Estado actual
 
-- Versión declarada: **0.2.1**, alpha técnica. No es una versión 1.0.
+- Versión declarada: **0.9.0**, preparación de beta pública. No es una versión 1.0.
 - El frontend público compila sin ROM y genera el módulo privado desde una ROM local compatible.
 - ABI declarada: **v3**, en `include/recomp/module_abi.h`.
 - Plataformas objetivo: macOS arm64/x86_64, Windows x86_64 y Linux x86_64/AppImage. La compilación o inspección de un paquete no prueba ejecución nativa.
@@ -17,7 +17,7 @@ La CI construye sin ROM, ejecuta CTest, audita el contenido público y verifica 
 
 **A02 sigue visible y pendiente:** `apu_status_irq_collision_reference` falla en la colisión de IRQ de frame y lectura de `$4015`. No debe ocultarse ni marcarse como pasado.
 
-El smoke ABI v3 y los diagnósticos de gameplay son automatizados; no equivalen a una partida completa. Siguen pendientes, entre otros, pruebas interactivas completas, rutas/muertes, sonido, activación de enemigos en widescreen, habitaciones verticales/fijas y ejecución nativa completa en cada sistema.
+El smoke ABI v3 y los diagnósticos de gameplay son automatizados; no equivalen a una partida completa. La presentación original 4:3 está activa y el panorámico queda aislado fuera del frontend. Siguen pendientes partidas completas sin ayudas, rutas, saltos, sonido y validación de ROM compatible en Linux/Steam Deck. La nueva interfaz inglesa, el banner temporal y la confirmación de salida requieren los resultados CI del commit de esta beta antes de publicación.
 
 ## Documentación de referencia
 

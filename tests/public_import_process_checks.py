@@ -40,7 +40,7 @@ def check(probe, resources):
             assert expected in message, (message, result.stderr)
             assert not list(cache.glob('user_game.*')), 'Synthetic fixture must not generate game content'
 
-        launch('invalid input', 'ROM incompatible: SHA-256 distinto')
+        launch('invalid input', 'Incompatible ROM: SHA-256 mismatch')
         # A module-level error occurs before the importer's own --log handling.
         (tools/'import_user_rom.py').write_text(
             'print("startup stdout", flush=True)\nraise RuntimeError("startup stderr fixture")\n',
