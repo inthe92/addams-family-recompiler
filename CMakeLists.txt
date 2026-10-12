@@ -35,8 +35,22 @@ target_compile_definitions(user_game_view PUBLIC NES_USER_ROM=1)
 target_link_libraries(user_game_view PUBLIC nes_runtime)
 
 if(NES_ENABLE_DESKTOP)
+  find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+  set(window_icon_header "${CMAKE_CURRENT_BINARY_DIR}/branding/application_icon_data.hpp")
+  add_custom_command(OUTPUT "${window_icon_header}"
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tools/public/icon_assets.py"
+      --png "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/nes-native-lab-64.png" --emit-header "${window_icon_header}"
+    DEPENDS tools/public/icon_assets.py assets/icons/nes-native-lab-64.png
+    COMMENT "Embedding official window icon (lossless RGBA, no image library)" VERBATIM)
+  add_library(application_icon STATIC runtime/src/application_icon.cpp "${window_icon_header}")
+  target_include_directories(application_icon PUBLIC runtime/include PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/branding")
+  target_link_libraries(application_icon PUBLIC SDL2::SDL2-static)
+  if(APPLE)
+    target_sources(application_icon PRIVATE runtime/src/application_icon_mac.mm)
+    target_link_libraries(application_icon PUBLIC "-framework Cocoa")
+  endif()
   add_library(user_rom STATIC runtime/src/user_rom.cpp)
-  target_link_libraries(user_rom PUBLIC user_game_view SDL2::SDL2-static)
+  target_link_libraries(user_rom PUBLIC user_game_view application_icon SDL2::SDL2-static)
   if(APPLE)
     target_sources(user_rom PRIVATE runtime/src/user_rom_mac.mm)
     target_link_libraries(user_rom PUBLIC "-framework Cocoa")
@@ -49,11 +63,35 @@ if(NES_ENABLE_DESKTOP)
   add_executable(nes_native MACOSX_BUNDLE app/desktop.cpp)
   target_link_libraries(nes_native PRIVATE user_rom desktop_presenter)
   target_compile_definitions(nes_native PRIVATE NES_ALPHA_BUILD=1 SDL_MAIN_HANDLED=1)
+  set(build_arch "${CMAKE_SYSTEM_PROCESSOR}")
+  if(APPLE AND CMAKE_OSX_ARCHITECTURES)
+    set(build_arch "${CMAKE_OSX_ARCHITECTURES}")
+  endif()
+  add_custom_target(native_build_metadata
+    COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tools/public/build_identity.py"
+      --build "${CMAKE_CURRENT_BINARY_DIR}" --version "${PROJECT_VERSION}"
+      --system "${CMAKE_SYSTEM_NAME}" --arch "${build_arch}"
+    BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/branding/native_build_metadata.hpp"
+      "${CMAKE_CURRENT_BINARY_DIR}/native-build-info.json"
+    COMMENT "Recording source revision, version and ABI (including dirty state)" VERBATIM)
+  add_dependencies(nes_native native_build_metadata)
+  target_include_directories(nes_native PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/branding")
   set_target_properties(nes_native PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "NES Native Lab"
     MACOSX_BUNDLE_GUI_IDENTIFIER "org.nes-native-lab.preview"
-    MACOSX_BUNDLE_SHORT_VERSION_STRING "0.2.1"
-    MACOSX_BUNDLE_BUNDLE_VERSION "0.2.1")
+    MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
+    MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+  if(APPLE)
+    target_sources(nes_native PRIVATE assets/icons/nes-native-lab.icns)
+    set_source_files_properties(assets/icons/nes-native-lab.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
+    set_target_properties(nes_native PROPERTIES MACOSX_BUNDLE_ICON_FILE "nes-native-lab.icns")
+  endif()
   if(WIN32)
+    enable_language(RC)
+    set(NES_ICON_ICO "${CMAKE_CURRENT_SOURCE_DIR}/assets/icons/nes-native-lab.ico")
+    configure_file(assets/icons/windows_icon.rc.in "${CMAKE_CURRENT_BINARY_DIR}/branding/windows_icon.rc" @ONLY)
+    set_source_files_properties("${CMAKE_CURRENT_BINARY_DIR}/branding/windows_icon.rc"
+      PROPERTIES OBJECT_DEPENDS "${NES_ICON_ICO}")
+    target_sources(nes_native PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/branding/windows_icon.rc")
     # Both SDL and the C++ runtime are static in the MinGW portable build.
     target_link_options(nes_native PRIVATE -static -static-libgcc -static-libstdc++)
   endif()
@@ -62,6 +100,22 @@ endif()
 include(CTest)
 if(BUILD_TESTING)
   find_package(Python3 3.9 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME package_identity_contract COMMAND "${Python3_EXECUTABLE}" -B
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/package_identity_checks.py")
+  set_tests_properties(package_identity_contract PROPERTIES LABELS "packaging;identity;synthetic" TIMEOUT 30)
+  add_test(NAME official_icon_assets COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/icon_asset_checks.py")
+  set_tests_properties(official_icon_assets PROPERTIES LABELS "branding;packaging" TIMEOUT 30)
+  if(NES_ENABLE_DESKTOP)
+    add_executable(window_icon_checks tests/window_icon_checks.cpp)
+    target_link_libraries(window_icon_checks PRIVATE application_icon)
+    target_compile_definitions(window_icon_checks PRIVATE SDL_MAIN_HANDLED=1)
+    if(WIN32)
+      target_link_options(window_icon_checks PRIVATE -static -static-libgcc -static-libstdc++)
+    endif()
+    add_test(NAME window_icon_contract COMMAND "${Python3_EXECUTABLE}" -B
+      "${CMAKE_CURRENT_SOURCE_DIR}/tests/window_icon_checks.py" "$<TARGET_FILE:window_icon_checks>")
+    set_tests_properties(window_icon_contract PROPERTIES LABELS "branding;sdl" TIMEOUT 30 ENVIRONMENT "SDL_VIDEODRIVER=dummy")
+  endif()
   add_test(NAME public_import_contract COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/public_import_checks.py")
   add_test(NAME diagnostic_harness_contract COMMAND "${Python3_EXECUTABLE}" -B
     "${CMAKE_CURRENT_SOURCE_DIR}/tests/known_divergence_checks.py")

@@ -16,6 +16,9 @@ import unittest
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / 'tools/public'))
+from icon_assets import verify_windows
+from build_identity import packaged
 FOLDER = 'NES-Native-Lab-Windows-x86_64'
 
 
@@ -285,13 +288,17 @@ def extracted_checks(resources, directory):
         commands.append(record)
         print(json.dumps(record), flush=True)
         result.check_returncode()
+        return result.stdout
     report = dict(commands=commands)
     try:
         report['dependencies'] = dependency_inventory(resources)
         python = resources / 'toolchain/python/python.exe'
         zig = resources / 'toolchain/zig/zig.exe'
         run([python, '-I', '--version']); run([zig, 'version'])
-        run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', resources])
+        report['package_identity']=packaged(resources,resources/'nes_native.exe',
+            os.environ.get('NES_PACKAGE_EXPECTED_COMMIT') or None,run)
+        run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', resources,
+             '--guard-inventory',Path(os.environ['NES_PACKAGE_TEST_BUILD'])/'ctest-inventory.json'])
         run([python, '-B', ROOT / 'tests/public_import_process_checks.py', resources,
              Path(os.environ['NES_PACKAGE_TEST_BUILD']) / 'import_probe.exe'])
         # Reuse all five cache decision tests, including ABI v2 regeneration,
@@ -321,7 +328,7 @@ sys.exit(0 if result.wasSuccessful() else 1)
         Path(os.environ['NES_PACKAGE_CHILD_REPORT']).write_text(json.dumps(report, indent=2) + '\n', encoding='utf-8')
 
 
-def verify(build, output, report_path):
+def verify(build, output, report_path, expected_commit=None):
     report = dict(host=platform.platform(), machine=platform.machine(), checks={}, status='FAIL')
     try:
         if os.name != 'nt' or platform.machine().lower() not in ('amd64', 'x86_64'):
@@ -329,7 +336,8 @@ def verify(build, output, report_path):
         archive_path = output / (FOLDER + '.zip')
         report['zip_sha256'] = hashlib.sha256(archive_path.read_bytes()).hexdigest()
         report['zip_bytes'] = archive_path.stat().st_size
-        archive_path.with_suffix('.zip.sha256').write_text(report['zip_sha256'] + '  ' + archive_path.name + '\n')
+        if archive_path.with_suffix('.zip.sha256').read_text().split()[0] != report['zip_sha256']:
+            raise ValueError('ZIP checksum sidecar differs')
         with tempfile.TemporaryDirectory(prefix='nes extracted Windows & spaces ') as name:
             temp = Path(name).resolve(); working = temp / 'external working directory'; working.mkdir()
             if temp.is_relative_to(ROOT) or temp.is_relative_to(build):
@@ -340,6 +348,8 @@ def verify(build, output, report_path):
                     raise ValueError('ZIP CRC failure')
                 archive.extractall(temp)
             resources = temp / FOLDER
+            verify_windows(resources)
+            report['checks']['official_icon'] = 'PASS (ICO bytes and EXE resource payloads)'
             required = ['nes_native.exe', 'WINDOWS_README.txt', 'LICENSE', 'THIRD_PARTY.md', 'README.md',
                         'README.es.md', 'licenses/SDL2-LICENSE.txt', 'licenses/Lua-readme.html',
                         'toolchain/python/python.exe', 'toolchain/zig/zig.exe', 'toolchain/target.json',
@@ -361,6 +371,7 @@ def verify(build, output, report_path):
             env.update(PATH=str(Path(os.environ['SystemRoot']) / 'System32'), PYTHONDONTWRITEBYTECODE='1',
                        ZIG_GLOBAL_CACHE_DIR=str(temp / 'synthetic zig cache'), NES_PACKAGE_TEST_BUILD=str(build),
                        NES_PACKAGE_CHILD_REPORT=str(temp / 'child-report.json'))
+            env['NES_PACKAGE_EXPECTED_COMMIT']=expected_commit or ''
             report['child_path'] = env['PATH']; report['extraction_outside_build'] = True
             python = resources / 'toolchain/python/python.exe'
             result = subprocess.run([str(python), '-B', str(Path(__file__).resolve()), '--extracted', str(resources),
@@ -430,6 +441,7 @@ if __name__ == '__main__':
     p.add_argument('--self-test', action='store_true'); p.add_argument('--build', type=Path)
     p.add_argument('--output', type=Path); p.add_argument('--report', type=Path)
     p.add_argument('--extracted', type=Path); p.add_argument('--working', type=Path)
+    p.add_argument('--expected-commit')
     args = p.parse_args()
     if args.self_test:
         result = unittest.TextTestRunner(verbosity=2).run(unittest.defaultTestLoader.loadTestsFromTestCase(FormatChecks))
@@ -438,4 +450,4 @@ if __name__ == '__main__':
         extracted_checks(args.extracted.resolve(), args.working.resolve())
     else:
         if not all((args.build, args.output, args.report)): p.error('--build, --output and --report are required')
-        verify(args.build.resolve(), args.output.resolve(), args.report.resolve())
+        verify(args.build.resolve(), args.output.resolve(), args.report.resolve(), args.expected_commit)

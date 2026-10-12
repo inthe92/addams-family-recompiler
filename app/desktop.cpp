@@ -8,6 +8,8 @@
 #include "runtime/gl_presenter.hpp"
 #include "runtime/sdl_audio_output.hpp"
 #include "runtime/wav_writer.hpp"
+#include "runtime/application_icon.hpp"
+#include "native_build_metadata.hpp"
 #ifdef NES_USER_ROM
 #include "runtime/user_rom.hpp"
 #endif
@@ -49,6 +51,9 @@ int main(int argc,char** argv) {
  std::ofstream diagnostic_output;
  nes::game::GameplayDiagnostic diagnostic;
  try {
+    if(argc==2 && std::string(argv[1])=="--build-info") {
+        std::cout<<nes::build::identity<<'\n';return 0;
+    }
     SDL_SetMainReady();
     uint64_t limit=0;bool fast=false,mute=false;std::string mod_path,capture,audio_path;
     bool god_enabled=false,diagnostic_requested=false;
@@ -92,7 +97,9 @@ int main(int argc,char** argv) {
     title="Addams Family — Alpha 0.2.1 · GOD activo · G: cambiar · Enter: empezar · Z/X";
 #endif
     auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,540,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
-    if(!window)throw std::runtime_error(SDL_GetError());GLContext context{SDL_GL_CreateContext(window.get())};
+    if(!window)throw std::runtime_error(SDL_GetError());
+    nes::runtime::set_application_icon(window.get());
+    GLContext context{SDL_GL_CreateContext(window.get())};
     if(!context.value)throw std::runtime_error(SDL_GetError());
     // PAL pacing below owns the clock. A Cocoa display-link wait can stop
     // receiving callbacks for a background/offscreen window and block input.

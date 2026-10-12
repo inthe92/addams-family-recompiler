@@ -22,6 +22,7 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            'package_identity_contract': 'Ran 7 tests',
             'public_import_contract': 'Ran 3 tests',
             'diagnostic_harness_contract': 'Ran 5 tests',
             'native_opcode_contract': '4736 native instruction cases:',

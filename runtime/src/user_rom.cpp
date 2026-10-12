@@ -1,5 +1,6 @@
 #include "runtime/user_rom.hpp"
 #include "runtime/module_abi.hpp"
+#include "runtime/application_icon.hpp"
 #include "game/compiled_program.h"
 #include "game/recovered_resources.h"
 #include "game/world_maps.h"
@@ -123,6 +124,7 @@ std::string choose_rom() {
     if(SDL_Init(SDL_INIT_VIDEO)!=0)throw std::runtime_error(SDL_GetError());
     auto* window=SDL_CreateWindow("Arrastra tu archivo .nes aqui para importarlo",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,240,0);
     if(!window){SDL_Quit();throw std::runtime_error(SDL_GetError());}
+    set_application_icon(window);
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_INFORMATION,"Importar ROM",
         "Esta aplicacion no incluye el juego.\n\nArrastra tu ROM .nes a esta ventana.\nTambien puedes ejecutarla con --rom /ruta/juego.nes.\n\nPython y el compilador estan incluidos en este paquete.",window);
     auto* surface=SDL_GetWindowSurface(window);
@@ -191,7 +193,7 @@ bool UserRomModule::prepare(int argc,char** argv,bool interactive) {
     SDL_Window* progress=nullptr;
     if(interactive&&!import_only&&SDL_Init(SDL_INIT_VIDEO)==0) {
         progress=SDL_CreateWindow("Importando ROM... primera compilacion: varios minutos",SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,720,180,0);
-        if(progress){auto* surface=SDL_GetWindowSurface(progress);if(surface){SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,24,32,50));SDL_UpdateWindowSurface(progress);}}
+        if(progress){set_application_icon(progress);auto* surface=SDL_GetWindowSurface(progress);if(surface){SDL_FillRect(surface,nullptr,SDL_MapRGB(surface->format,24,32,50));SDL_UpdateWindowSurface(progress);}}
     }
     while(task.wait_for(std::chrono::milliseconds(25))!=std::future_status::ready) {
         if(progress){SDL_Event event{};while(SDL_PollEvent(&event)){};SDL_UpdateWindowSurface(progress);}

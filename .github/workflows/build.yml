@@ -86,7 +86,7 @@ jobs:
       - name: Verify extracted package on native macOS 15
         id: package_checks
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
-        run: python3 -B tests/macos_package_checks.py --build build --output dist --arch ${{ matrix.arch }} --report build/macos-package-verification.json --require-native-macos15
+        run: python3 -B tests/macos_package_checks.py --build build --output dist --arch ${{ matrix.arch }} --report build/macos-package-verification.json --require-native-macos15 --expected-commit "${{ github.sha }}"
       - name: Preserve package verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,7 +100,9 @@ jobs:
         if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
           name: frontend-${{ matrix.os }}
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.zip.sha256
           if-no-files-found: error
 
   windows:
@@ -162,7 +164,7 @@ jobs:
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: |
           python -B tests/windows_package_checks.py --self-test
-          python -B tests/windows_package_checks.py --build build --output dist --report build/windows-package-verification.json
+          python -B tests/windows_package_checks.py --build build --output dist --report build/windows-package-verification.json --expected-commit "${{ github.sha }}"
       - name: Preserve Windows package verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -258,7 +260,7 @@ jobs:
       - name: Verify Linux AppImage on native runner
         id: package_checks
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
-        run: python3 -B tests/linux_appimage_checks.py --build build --output dist --report build/linux-appimage-verification.json
+        run: python3 -B tests/linux_appimage_checks.py --build build --output dist --report build/linux-appimage-verification.json --expected-commit "${{ github.sha }}"
       - name: Preserve Linux AppImage verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -272,5 +274,6 @@ jobs:
           name: frontend-linux-x86_64-AppImage
           path: |
             dist/*.AppImage
+            dist/*.AppImage.sha256
             packaging-tools-sha256.txt
           if-no-files-found: error

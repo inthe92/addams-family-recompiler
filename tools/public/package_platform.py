@@ -11,6 +11,8 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
+from icon_assets import verify_assets, verify_macos, verify_windows, verify_linux
+from build_identity import prepared
 
 ROOT=Path(__file__).resolve().parents[2]
 
@@ -48,6 +50,8 @@ def validate_macos_deployment(app,minimum,arch):
     print('Verified macOS deployment:',minimum,arch,checked,'native binaries')
 
 def copy_resources(destination,toolchain):
+    shutil.copytree(ROOT/'assets/icons',destination/'assets/icons',
+        ignore=shutil.ignore_patterns('*.rc.in'),dirs_exist_ok=True)
     for relative in ['tools/recompiler','include','game/include','docs']:
         shutil.copytree(ROOT/relative,destination/relative,ignore=shutil.ignore_patterns('__pycache__','*.pyc'),dirs_exist_ok=True)
     for name in ['README.md','README.es.md','LICENSE','THIRD_PARTY.md']:
@@ -63,11 +67,18 @@ def make_archive(folder,target):
             if file.is_file():archive.write(file,folder.name+'/'+file.relative_to(folder).as_posix())
 
 def package(build,output,toolchain,system=None,arch=None):
+    verify_assets()
     system=system or platform.system()
     arch=arch or ('x86_64' if platform.machine().lower() in ['amd64','x86_64'] else 'arm64')
     target=json.loads((toolchain/'target.json').read_text())['system']
     expected={'Darwin':'macos','Windows':'windows','Linux':'linux'}[system]+'-'+arch
     if target!=expected:raise ValueError('Bundled runtime architecture mismatch')
+    identity=prepared(build,system,arch)
+    names={'Darwin':['NES Native Lab.app','NES-Native-Lab-macOS-'+arch+'.zip'],
+           'Windows':['NES-Native-Lab-Windows-x86_64','NES-Native-Lab-Windows-x86_64.zip'],
+           'Linux':['NES-Native-Lab.AppDir','NES-Native-Lab-Linux-'+arch+'.AppImage']}[system]
+    if any((output/name).exists() for name in names):
+        raise ValueError('Package destination already exists; use a fresh output directory (nothing was deleted)')
     output.mkdir(parents=True,exist_ok=True)
     if system=='Darwin':
         minimum=macos_deployment_target(build)
@@ -75,10 +86,13 @@ def package(build,output,toolchain,system=None,arch=None):
             app=Path(temp)/'NES Native Lab.app'
             subprocess.run(['/usr/bin/ditto','--norsrc','--noextattr','--noqtn','--noacl',str(build/'nes_native.app'),str(app)],check=True)
             copy_resources(app/'Contents/Resources',toolchain)
+            (app/'Contents/Resources/PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
             info=app/'Contents/Info.plist';data=plistlib.loads(info.read_bytes())
             data.update(CFBundleName='NES Native Lab',CFBundleDisplayName='NES Native Lab',NSHighResolutionCapable=True,
-                LSMinimumSystemVersion=minimum)
+                LSMinimumSystemVersion=minimum,CFBundleIconFile='nes-native-lab.icns')
             info.write_bytes(plistlib.dumps(data))
+            shutil.copyfile(ROOT/'assets/icons/nes-native-lab.icns',app/'Contents/Resources/nes-native-lab.icns')
+            verify_macos(app)
             # Check the frontend and all nested Python/Zig libraries, not SDK versions.
             validate_macos_deployment(app,minimum,arch)
             subprocess.run(['/usr/bin/xattr','-cr',str(app)],check=True)
@@ -101,7 +115,9 @@ def package(build,output,toolchain,system=None,arch=None):
         folder=output/'NES-Native-Lab-Windows-x86_64';folder.mkdir(exist_ok=True)
         shutil.copyfile(build/'nes_native.exe',folder/'nes_native.exe')
         copy_resources(folder,toolchain)
+        (folder/'PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
         shutil.copyfile(ROOT/'tools/public/WINDOWS_README.txt',folder/'WINDOWS_README.txt')
+        verify_windows(folder)
         target=output/(folder.name+'.zip');make_archive(folder,target)
     else:
         # ELF dependencies and AppImage runtime are handled by linuxdeploy.
@@ -109,11 +125,23 @@ def package(build,output,toolchain,system=None,arch=None):
         shutil.copyfile(build/'nes_native',folder/'usr/bin/nes_native')
         (folder/'usr/bin/nes_native').chmod(0o755)
         copy_resources(folder/'usr/bin',toolchain)
-        shutil.copyfile(ROOT/'assets/nes-native-lab.svg',folder/'nes-native-lab.svg')
+        (folder/'usr/bin/PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
+        shutil.copyfile(ROOT/'assets/icons/nes-native-lab-256.png',folder/'nes-native-lab.png')
+        shutil.copyfile(ROOT/'assets/icons/nes-native-lab-256.png',folder/'.DirIcon')
+        for size in [16,32,48,64,128,256,512,1024]:
+            icons=folder/f'usr/share/icons/hicolor/{size}x{size}/apps';icons.mkdir(parents=True,exist_ok=True)
+            shutil.copyfile(ROOT/f'assets/icons/nes-native-lab-{size}.png',icons/'nes-native-lab.png')
         (folder/'nes-native-lab.desktop').write_text('[Desktop Entry]\nType=Application\nName=NES Native Lab\nExec=nes_native\nIcon=nes-native-lab\nCategories=Game;\n')
+        applications=folder/'usr/share/applications';applications.mkdir(parents=True,exist_ok=True)
+        shutil.copyfile(folder/'nes-native-lab.desktop',applications/'nes-native-lab.desktop')
+        verify_linux(folder)
         # Executable location, not the caller's current directory, owns tools.
         (folder/'AppRun').write_text('#!/bin/sh\nTASK_APPDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\nexport LD_LIBRARY_PATH="$TASK_APPDIR/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"\nexec "$TASK_APPDIR/usr/bin/nes_native" "$@"\n')
         (folder/'AppRun').chmod(0o755);target=folder
+        shutil.copyfile(ROOT/'tools/public/diagnose_linux.sh',folder/'diagnose-linux.sh')
+        (folder/'diagnose-linux.sh').chmod(0o755)
+    if target.is_file():
+        target.with_suffix(target.suffix+'.sha256').write_text(hashlib.sha256(target.read_bytes()).hexdigest()+'  '+target.name+'\n')
     print(target)
     return target
 

@@ -5,7 +5,9 @@ import platform
 import subprocess
 import sys
 import tempfile
-p=argparse.ArgumentParser();p.add_argument('resources',type=Path);a=p.parse_args()
+import json
+p=argparse.ArgumentParser();p.add_argument('resources',type=Path)
+p.add_argument('--guard-inventory',type=Path);a=p.parse_args()
 sys.path.insert(0,str(a.resources/'tools/recompiler'))
 from import_user_rom import native_compiler, module_abi_version
 from emit_blocks import decode, emit_bank
@@ -49,8 +51,14 @@ with tempfile.TemporaryDirectory(prefix='synthetic-native-') as name:
         '-I',str(a.resources/'include'),'-I',str(a.resources/'game/include'),
         str(source),'-o',str(output)],check=True)
     if platform.system()=='Darwin':subprocess.run(['/usr/bin/codesign','--force','--sign','-',str(output)],check=True)
+    if a.guard_inventory:
+        inventory=json.loads(a.guard_inventory.read_text())
+        guard=[t for t in inventory['tests'] if t['name']=='module_abi_contract']
+        assert len(guard)==1 and len(guard[0]['command'])==5, 'Missing native ABI guard'
+        subprocess.run([*guard[0]['command'][:4],str(output)],check=True)
+        print('Real SDL ABI guard accepted bundled synthetic v3 module: OK')
     # A separate process releases the DLL before Windows removes the fixture.
-    subprocess.run([sys.executable,'-c',
+    subprocess.run([sys.executable,'-B','-c',
         'import ctypes,sys; library=ctypes.CDLL(sys.argv[1]); '
         'assert library.public_toolchain_contract()==42; '
         'assert library.nes_recomp_abi_version()==3; '

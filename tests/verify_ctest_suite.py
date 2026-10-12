@@ -11,6 +11,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    'package_identity_contract',
+    'official_icon_assets', 'window_icon_contract',
     'public_import_contract', 'diagnostic_harness_contract',
     'native_opcode_contract', 'native_stack_programs', 'ppustatus_read_timing',
     'native_bus_side_effects', 'import_cache_abi_contract', 'module_abi_contract',
@@ -27,8 +29,9 @@ REQUIRED = {
     'apu_status_irq_collision_reference', 'apu_frame_mode_delay_reference',
     'apu_frame_mode_edges_contract', 'apu_sdl_queue_contract',
 }
-DESKTOP_ONLY = {'module_abi_contract', 'apu_sdl_queue_contract'}
+DESKTOP_ONLY = {'module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    'package_identity_contract': r'Ran 7 tests\b',
     'public_import_contract': r'Ran 3 tests\b',
     'diagnostic_harness_contract': r'Ran 5 tests\b',
     'native_opcode_contract': r'\b4736 native instruction cases:',
