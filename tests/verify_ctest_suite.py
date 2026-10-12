@@ -11,6 +11,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    'original_presentation_geometry', 'original_presentation_pixels', 'original_presentation_pacing',
     'package_identity_contract',
     'official_icon_assets', 'window_icon_contract',
     'public_import_contract', 'diagnostic_harness_contract',
@@ -31,6 +32,9 @@ REQUIRED = {
 }
 DESKTOP_ONLY = {'module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    'original_presentation_geometry': r'18 original presentation geometry cases: PASS',
+    'original_presentation_pixels': r'7 original presentation pixels cases: PASS',
+    'original_presentation_pacing': r'7 original presentation pacing cases: PASS',
     'package_identity_contract': r'Ran 7 tests\b',
     'public_import_contract': r'Ran 3 tests\b',
     'diagnostic_harness_contract': r'Ran 5 tests\b',

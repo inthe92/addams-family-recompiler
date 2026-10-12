@@ -64,11 +64,20 @@ Generated modules and resources contain game content and must remain private. Do
 | Z | A | Jump |
 | X | B | Doors / interaction |
 | Right Shift | Back | Select |
-| G | Assign with Steam Input | Toggle GOD; enabled by default in the alpha |
-| H | Assign with Steam Input | Grant and retain inventory/access requirements for the session |
+| G | Assign with Steam Input | Toggle GOD; only with `--god` or `--diagnostic` |
+| H | Assign with Steam Input | Grant and retain inventory; only with `--god` or `--diagnostic` |
+| F11 | — | Toggle fullscreen |
 | Escape | — | Close |
 
 GOD protects health/lives and attempts a room reload for some direct deaths. H is not teleportation. All routes, battles and death recovery cases are not yet verified.
+
+## Original presentation (local preparation for 1.0)
+
+The application starts in a 960 × 720 window. It displays the entire original 256 × 240 frame at a visual 4:3 aspect ratio using nearest-neighbor filtering. It does not extend rooms or draw enemies outside that frame. Widescreen sources remain isolated for research and existing tests; the application has no switch to enable them.
+
+Resizing prefers multiples of 320 × 240 (integer vertical scaling, 5:4 NES pixel aspect). Small windows and fullscreen use the largest fitting 4:3 rectangle, surrounded by black bars. `--fullscreen` starts fullscreen; F11 enters/exits it. PAL timing remains independent of window size and display refresh.
+
+GOD is off by default in this build. `--god` or `--diagnostic` explicitly enable G/H debug controls; `--diagnostic --no-god` starts normal gameplay with logging. These local changes do not update previously published alpha packages. See [the verification report](docs/ORIGINAL_PRESENTATION_1_0.md).
 
 ## Build without a ROM
 

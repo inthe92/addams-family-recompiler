@@ -22,6 +22,9 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            'original_presentation_geometry': '18 original presentation geometry cases: PASS',
+            'original_presentation_pixels': '7 original presentation pixels cases: PASS',
+            'original_presentation_pacing': '7 original presentation pacing cases: PASS',
             'package_identity_contract': 'Ran 7 tests',
             'public_import_contract': 'Ran 3 tests',
             'diagnostic_harness_contract': 'Ran 5 tests',

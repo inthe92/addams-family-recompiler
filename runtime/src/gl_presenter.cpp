@@ -1,5 +1,5 @@
 #include "runtime/gl_presenter.hpp"
-#include "runtime/palette.hpp"
+#include "runtime/original_presentation.hpp"
 #include <SDL.h>
 #include <SDL_opengl.h>
 #include <array>
@@ -38,8 +38,7 @@ struct GLPresenter::Impl {
     PFNGLDELETEBUFFERSPROC delete_buffers = gl_function<PFNGLDELETEBUFFERSPROC>("glDeleteBuffers");
     PFNGLVERTEXATTRIBPOINTERPROC vertex_pointer = gl_function<PFNGLVERTEXATTRIBPOINTERPROC>("glVertexAttribPointer");
     PFNGLENABLEVERTEXATTRIBARRAYPROC enable_attribute = gl_function<PFNGLENABLEVERTEXATTRIBARRAYPROC>("glEnableVertexAttribArray");
-    unsigned image_width=VideoState::width,image_height=VideoState::height;
-    std::vector<uint8_t> rgba=std::vector<uint8_t>(VideoState::width*VideoState::height*4u);
+    OriginalRGBA rgba{};
     explicit Impl(SDL_Window* w) : window(w) {}
     GLuint shader(GLenum kind, const char* source) {
         const GLuint result = create_shader(kind);shader_source(result,1,&source,nullptr);compile_shader(result);
@@ -61,10 +60,7 @@ GLPresenter::GLPresenter(SDL_Window* window) : impl_(std::make_unique<Impl>(wind
     g.bind_attribute(g.program,0,"position");g.bind_attribute(g.program,1,"uv");g.link_program(g.program);
     g.delete_shader(vs);g.delete_shader(fs);GLint linked=0;g.get_program(g.program,GL_LINK_STATUS,&linked);
     if(!linked)throw std::runtime_error("OpenGL presentation shader link failed");
-    // Preserve the original pixel geometry while the wider world layer is built.
-    // A 16:9 window by itself is not extended-world widescreen.
-    constexpr float left=-0.6f,right=0.6f;
-    const float vertices[]={left,-1,0,1,right,-1,1,1,right,1,1,0,left,-1,0,1,right,1,1,0,left,1,0,0};
+    const float vertices[]={-1,-1,0,1,1,-1,1,1,1,1,1,0,-1,-1,0,1,1,1,1,0,-1,1,0,0};
     g.gen_vaos(1,&g.vao);g.bind_vao(g.vao);g.gen_buffers(1,&g.buffer);g.bind_buffer(GL_ARRAY_BUFFER,g.buffer);
     g.buffer_data(GL_ARRAY_BUFFER,sizeof vertices,vertices,GL_STATIC_DRAW);
     g.vertex_pointer(0,2,GL_FLOAT,GL_FALSE,4*sizeof(float),nullptr);
@@ -81,29 +77,14 @@ void GLPresenter::present(const VideoState& video) {
     present(video.frame().data(),VideoState::width,VideoState::height);
 }
 void GLPresenter::present(const uint8_t* indices,unsigned image_width,unsigned image_height) {
-    if(!indices || !image_width || !image_height || image_width>8192 || image_height>8192)
-        throw std::invalid_argument("Invalid presentation frame dimensions");
     auto& g=*impl_;
-    if(g.image_width!=image_width || g.image_height!=image_height) {
-        g.image_width=image_width;g.image_height=image_height;
-        g.rgba.resize(static_cast<std::size_t>(image_width)*image_height*4u);
-        const float edge=static_cast<float>(static_cast<double>(image_width)/(static_cast<double>(image_height)*16.0/9.0));
-        const float vertices[]={-edge,-1,0,1,edge,-1,1,1,edge,1,1,0,-edge,-1,0,1,edge,1,1,0,-edge,1,0,0};
-        g.bind_buffer(GL_ARRAY_BUFFER,g.buffer);g.buffer_data(GL_ARRAY_BUFFER,sizeof vertices,vertices,GL_DYNAMIC_DRAW);
-        glBindTexture(GL_TEXTURE_2D,g.texture);
-        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,static_cast<GLsizei>(image_width),static_cast<GLsizei>(image_height),0,GL_RGBA,GL_UNSIGNED_BYTE,nullptr);
-    }
-    for(std::size_t i=0;i<static_cast<std::size_t>(image_width)*image_height;++i) {
-        const uint32_t color=rgb_palette[indices[i]&63u];
-        g.rgba[i*4]=static_cast<uint8_t>(color>>16);g.rgba[i*4+1]=static_cast<uint8_t>(color>>8);
-        g.rgba[i*4+2]=static_cast<uint8_t>(color);g.rgba[i*4+3]=255;
-    }
+    original_rgba(indices,image_width,image_height,g.rgba);
     int width=0,height=0;SDL_GL_GetDrawableSize(g.window,&width,&height);
     glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
-    const double aspect=16.0/9.0;
-    const int viewport_width=static_cast<int>(height*aspect);
-    if(viewport_width<=width)glViewport((width-viewport_width)/2,0,viewport_width,height);
-    else {const int viewport_height=static_cast<int>(width/aspect);glViewport(0,(height-viewport_height)/2,width,viewport_height);}
+    const auto viewport=original_viewport(width,height,
+        (SDL_GetWindowFlags(g.window)&SDL_WINDOW_FULLSCREEN)!=0);
+    if(!viewport.width || !viewport.height)return;
+    glViewport(viewport.x,viewport.y,viewport.width,viewport.height);
     g.use_program(g.program);g.bind_vao(g.vao);glBindTexture(GL_TEXTURE_2D,g.texture);
     glTexSubImage2D(GL_TEXTURE_2D,0,0,0,static_cast<GLsizei>(image_width),static_cast<GLsizei>(image_height),GL_RGBA,GL_UNSIGNED_BYTE,g.rgba.data());
     glDrawArrays(GL_TRIANGLES,0,6);

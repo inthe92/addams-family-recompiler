@@ -1,11 +1,10 @@
 #include "game/compiled_program.h"
 #include "game/recovered_resources.h"
-#include "game/world_view.hpp"
-#include "game/actor_view.hpp"
 #include "game/god_mode.hpp"
 #include "game/gameplay_diagnostic.hpp"
 #include "runtime/bus.hpp"
 #include "runtime/gl_presenter.hpp"
+#include "runtime/original_presentation.hpp"
 #include "runtime/sdl_audio_output.hpp"
 #include "runtime/wav_writer.hpp"
 #include "runtime/application_icon.hpp"
@@ -55,17 +54,19 @@ int main(int argc,char** argv) {
         std::cout<<nes::build::identity<<'\n';return 0;
     }
     SDL_SetMainReady();
-    uint64_t limit=0;bool fast=false,mute=false;std::string mod_path,capture,audio_path;
-    bool god_enabled=false,diagnostic_requested=false;
-#ifdef NES_ALPHA_BUILD
-    god_enabled=true;
+#ifdef __APPLE__
+    // Desktop-sized borderless fullscreen avoids Cocoa Space transitions.
+    SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES,"0");
 #endif
+    uint64_t limit=0;bool fast=false,mute=false,fullscreen=false;std::string mod_path,capture,audio_path;
+    bool god_enabled=false,diagnostic_requested=false;
     for(int i=1;i<argc;++i){const std::string option=argv[i];if(option=="--unthrottled"){fast=true;continue;}
 #ifdef NES_USER_ROM
         if(option=="--import-only")continue;
         if(option=="--rom"||option=="--import-cache"||option=="--import-tools"){++i;continue;}
         if(option.rfind("-psn_",0)==0)continue;
 #endif
+        if(option=="--fullscreen"){fullscreen=true;continue;}
         if(option=="--mute"){mute=true;continue;}
         if(option=="--diagnostic"){diagnostic_requested=true;continue;}
         if(option=="--god"){god_enabled=true;continue;}
@@ -94,9 +95,9 @@ int main(int argc,char** argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1);
     const char* title="The Addams Family — Native";
 #ifdef NES_ALPHA_BUILD
-    title="Addams Family — Alpha 0.2.1 · GOD activo · G: cambiar · Enter: empezar · Z/X";
+    title="Addams Family — Alpha 0.2.1 · Enter: empezar · Z/X";
 #endif
-    auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,540,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
+    auto window=std::unique_ptr<SDL_Window,decltype(&SDL_DestroyWindow)>(SDL_CreateWindow(title,SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,960,720,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE|SDL_WINDOW_ALLOW_HIGHDPI),SDL_DestroyWindow);
     if(!window)throw std::runtime_error(SDL_GetError());
     nes::runtime::set_application_icon(window.get());
     GLContext context{SDL_GL_CreateContext(window.get())};
@@ -107,10 +108,10 @@ int main(int argc,char** argv) {
     nes::runtime::GLPresenter presenter(window.get());
     std::cout<<"OpenGL "<<presenter.version()<<"; statically recompiled C game; PAL runtime\n";
     nes::runtime::Bus bus({&game_prg_data[0][0],131072u,game_chr_data,131072u});
-    nes::game::ActorView actors;
-    CPUState cpu=cpu_initial_state(game_reset_vector);RuntimeServices services=actors.services(bus);
+    CPUState cpu=cpu_initial_state(game_reset_vector);RuntimeServices services=bus.services();
     nes::game::GodMode god;services=god.services(bus,services);god.set_enabled(god_enabled);
     services=diagnostic.services(bus,services,cpu);
+    const bool debug_controls=god_enabled||diagnostic_requested;
     const auto update_title=[&]{
         const std::string caption=std::string("Addams Family — ")+
 #ifdef NES_ALPHA_BUILD
@@ -118,11 +119,12 @@ int main(int argc,char** argv) {
 #else
             "Native · "+
 #endif
-            (god.enabled()?"GOD activo":"GOD desactivado")+
-            (god.all_items()?" · OBJETOS completos":" · H: todos los objetos")+" · G: GOD · Enter · Flechas · Z/X";
+            "4:3 · Enter · Flechas · Z/X · F11: pantalla completa"+
+            (debug_controls?std::string(" · G: GOD · H: objetos")+(god.enabled()?" · GOD activo":" · GOD desactivado")+(god.all_items()?" · OBJETOS completos":""):std::string());
         SDL_SetWindowTitle(window.get(),caption.c_str());
     };
     update_title();
+    if(fullscreen && SDL_SetWindowFullscreen(window.get(),SDL_WINDOW_FULLSCREEN_DESKTOP)!=0)throw std::runtime_error(SDL_GetError());
     nes::runtime::SDLAudioOutput audio_output(!mute,fast);
     std::unique_ptr<nes::runtime::WavWriter> wav;
     if(!audio_path.empty())wav=std::make_unique<nes::runtime::WavWriter>(audio_path,nes::runtime::AudioState::sample_rate);
@@ -134,12 +136,16 @@ int main(int argc,char** argv) {
     Controller controller;for(int i=0;i<SDL_NumJoysticks();++i)if(SDL_IsGameController(i)){controller.value=SDL_GameControllerOpen(i);break;}
     bool running=true;const Uint64 frequency=SDL_GetPerformanceFrequency();
     double next_deadline=static_cast<double>(SDL_GetPerformanceCounter());
-    uint64_t presented=0;nes::game::WorldView world_view;
+    uint64_t presented=0;
     while(running&&(!limit||presented<limit)) {
         SDL_Event event;while(SDL_PollEvent(&event)) {
             if(event.type==SDL_QUIT||(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_ESCAPE))running=false;
-            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
-            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(debug_controls&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(debug_controls&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_F11){
+                const Uint32 flag=(SDL_GetWindowFlags(window.get())&SDL_WINDOW_FULLSCREEN)?0:SDL_WINDOW_FULLSCREEN_DESKTOP;
+                if(SDL_SetWindowFullscreen(window.get(),flag)!=0)throw std::runtime_error(SDL_GetError());
+            }
             if(event.type==SDL_CONTROLLERDEVICEADDED&&!controller.value)controller.value=SDL_GameControllerOpen(event.cdevice.which);
             if(event.type==SDL_CONTROLLERDEVICEREMOVED&&controller.value&&SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller.value))==event.cdevice.which){SDL_GameControllerClose(controller.value);controller.value=nullptr;}
         }
@@ -159,20 +165,17 @@ int main(int argc,char** argv) {
         diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());
         if(diagnostic.failed()&&diagnostic_requested){std::cerr<<"Gameplay diagnostic stopped: output write failed; session evidence is incomplete\n";diagnostic_requested=false;}
         bus.video().consume_frame();auto samples=bus.audio().take_samples();audio_output.submit(samples);if(wav)wav->append(samples);
-        world_view.compose(bus,&actors);presenter.present(world_view.frame().data(),world_view.width,world_view.height);++presented;
+        presenter.present(bus.video());++presented;
         if(limit&&presented==limit&&!capture.empty())presenter.capture(capture);
         SDL_GL_SwapWindow(window.get());
-        if(!fast){next_deadline+=static_cast<double>(frequency)/50.007;
-            const auto now=SDL_GetPerformanceCounter();
-            // After a long host pause, resume at normal speed instead of
-            // generating a burst of catch-up frames that drops queued sound.
-            if(static_cast<double>(now)>next_deadline+static_cast<double>(frequency)/10.0)next_deadline=static_cast<double>(now);
+        if(!fast){
+            next_deadline=nes::runtime::next_pal_deadline(next_deadline,static_cast<double>(frequency),static_cast<double>(SDL_GetPerformanceCounter()));
             while(static_cast<double>(SDL_GetPerformanceCounter())<next_deadline)SDL_Delay(1);}
     }
     if(wav)wav->finish();
     diagnostic.end(limit&&presented==limit?"frame_limit":"user_quit");
     if(diagnostic.failed()&&diagnostic_requested)std::cerr<<"Gameplay diagnostic incomplete: output write failed\n";
-    std::cout<<"Presented "<<presented<<" frames; screen="<<static_cast<unsigned>(bus.ram().read(0x045B))<<"; NMI="<<bus.nmi_count()<<"; DMA="<<bus.dma_count()<<"; DMC="<<bus.dmc_dma_count()<<"; audio_samples="<<bus.audio().produced_samples()<<"; device_submitted="<<audio_output.submitted_samples()<<"; device_skipped="<<audio_output.skipped_samples()<<"; queued_bytes="<<audio_output.queued_bytes()<<"; extended_background="<<world_view.extended_background()<<"; camera_x="<<world_view.camera_x()<<"; lateral_sprite_pixels="<<world_view.lateral_sprite_pixels()<<'\n';
+    std::cout<<"Presented "<<presented<<" frames; screen="<<static_cast<unsigned>(bus.ram().read(0x045B))<<"; NMI="<<bus.nmi_count()<<"; DMA="<<bus.dma_count()<<"; DMC="<<bus.dmc_dma_count()<<"; audio_samples="<<bus.audio().produced_samples()<<"; device_submitted="<<audio_output.submitted_samples()<<"; device_skipped="<<audio_output.skipped_samples()<<"; queued_bytes="<<audio_output.queued_bytes()<<'\n';
     std::cout<<"God mode="<<god.enabled()<<"; blocked_damage="<<god.blocked_damage()<<"; rescues="<<god.rescues()<<'\n';
     return 0;
  } catch(const std::exception& error){diagnostic.error("runtime_exception");diagnostic.end("exception");show_error(error.what());return 1;}
