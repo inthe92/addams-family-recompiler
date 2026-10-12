@@ -47,12 +47,17 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Collect high refresh evidence
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics run --graphics-label macos-native-runner
       - name: Preserve test verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ctest-${{ matrix.os }}
           path: |
+            build/high-refresh-evidence.json
+            build/high-refresh-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
             build/Testing/Temporary/LastTest.log
@@ -140,6 +145,11 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Collect high refresh evidence
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        # Hosted Windows desktop/GL 3.2 capability has not been established.
+        # Native deterministic contracts run in CTest; physical GL remains manual.
+        run: python -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics not-executed --graphics-label windows-hosted-display-unverified
       - name: Preserve test verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -147,6 +157,8 @@ jobs:
           name: ctest-windows-x64
           path: |
             build/native-build-info.json
+            build/high-refresh-evidence.json
+            build/high-refresh-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
             build/Testing/Temporary/LastTest.log
@@ -198,7 +210,7 @@ jobs:
       - name: Install build and desktop dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ python3 libgl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxinerama-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+          sudo apt-get install -y cmake ninja-build g++ python3 libgl1-mesa-dev libgl1-mesa-dri xvfb xauth libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxinerama-dev libwayland-dev libxkbcommon-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
       - name: Audit source export
         id: source_audit
         run: python3 -B tools/public/audit_public.py .
@@ -216,12 +228,18 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Collect high refresh evidence
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        # Native Linux process, Mesa software GL and virtual X display: no scanout.
+        run: xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 python3 -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics run --graphics-label linux-xvfb-mesa
       - name: Preserve test verification evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ctest-linux-x64
           path: |
+            build/high-refresh-evidence.json
+            build/high-refresh-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
             build/Testing/Temporary/LastTest.log

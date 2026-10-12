@@ -11,6 +11,9 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    'high_refresh_evidence_contract',
+    'frontend_presentation_schedule', 'frontend_presentation_snapshot', 'frontend_presentation_native',
+    'frontend_timing_metrics', 'frontend_timing_clock_contract', 'frontend_timing_source_contract', 'frontend_timing_native_contract',
     'frontend_ui_banner', 'frontend_ui_quit', 'frontend_ui_bitmap', 'frontend_english_contract', 'frontend_sdl_events', 'frontend_audio_pause',
     'original_presentation_geometry', 'original_presentation_pixels', 'original_presentation_pacing',
     'package_identity_contract',
@@ -33,6 +36,14 @@ REQUIRED = {
 }
 DESKTOP_ONLY = {'frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    'high_refresh_evidence_contract': r'Ran 7 tests\b',
+    'frontend_presentation_schedule': r'Presentation clock schedule cases=12 PASS',
+    'frontend_presentation_snapshot': r'Presentation clock snapshot cases=7 PASS',
+    'frontend_presentation_native': r'Frontend scheduled native cases=9 PASS',
+    'frontend_timing_metrics': r'Frontend timing metrics cases=9 PASS',
+    'frontend_timing_clock_contract': r'Frontend timing clock_contract cases=6 PASS',
+    'frontend_timing_source_contract': r'Ran 5 tests\b',
+    'frontend_timing_native_contract': r'Frontend timing native cases=8 PASS',
     'frontend_ui_banner': r'Frontend banner cases=9 PASS',
     'frontend_ui_quit': r'Frontend quit cases=18 PASS',
     'frontend_ui_bitmap': r'Frontend bitmap cases=8 PASS',

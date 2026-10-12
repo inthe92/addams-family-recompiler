@@ -1,5 +1,7 @@
 #include "runtime/gl_presenter.hpp"
 #include "runtime/original_presentation.hpp"
+#include "runtime/frontend_timing.hpp"
+#include "runtime/presentation_clock.hpp"
 #include <SDL.h>
 #include <SDL_opengl.h>
 #include <array>
@@ -15,6 +17,8 @@ template<class T> static T gl_function(const char* name) {
 }
 struct GLPresenter::Impl {
     SDL_Window* window;
+    nes::frontend::FrontendTiming* timing;
+    nes::frontend::FrontendTiming disabled_timing;
     GLuint program{}, texture{}, vao{}, buffer{}, ui_texture{}, ui_vao{}, ui_buffer{};
     PFNGLCREATESHADERPROC create_shader = gl_function<PFNGLCREATESHADERPROC>("glCreateShader");
     PFNGLSHADERSOURCEPROC shader_source = gl_function<PFNGLSHADERSOURCEPROC>("glShaderSource");
@@ -39,7 +43,8 @@ struct GLPresenter::Impl {
     PFNGLVERTEXATTRIBPOINTERPROC vertex_pointer = gl_function<PFNGLVERTEXATTRIBPOINTERPROC>("glVertexAttribPointer");
     PFNGLENABLEVERTEXATTRIBARRAYPROC enable_attribute = gl_function<PFNGLENABLEVERTEXATTRIBARRAYPROC>("glEnableVertexAttribArray");
     OriginalRGBA rgba{};
-    explicit Impl(SDL_Window* w) : window(w) {}
+    uint64_t cached_publication{};
+    Impl(SDL_Window* w, nes::frontend::FrontendTiming* t) : window(w), timing(t) {}
     GLuint shader(GLenum kind, const char* source) {
         const GLuint result = create_shader(kind);shader_source(result,1,&source,nullptr);compile_shader(result);
         GLint ok=0;get_shader(result,GL_COMPILE_STATUS,&ok);
@@ -52,7 +57,7 @@ struct GLPresenter::Impl {
         if(texture)glDeleteTextures(1,&texture);if(program)delete_program(program);
     }
 };
-GLPresenter::GLPresenter(SDL_Window* window) : impl_(std::make_unique<Impl>(window)) {
+GLPresenter::GLPresenter(SDL_Window* window,nes::frontend::FrontendTiming* timing) : impl_(std::make_unique<Impl>(window,timing)) {
     auto& g=*impl_;
     const char* vertex="#version 150\nin vec2 position; in vec2 uv; out vec2 texcoord; void main(){ gl_Position=vec4(position,0,1); texcoord=uv; }";
     const char* fragment="#version 150\nuniform sampler2D image; in vec2 texcoord; out vec4 color; void main(){ color=texture(image,texcoord); }";
@@ -85,19 +90,40 @@ const char* GLPresenter::version() const { return reinterpret_cast<const char*>(
 void GLPresenter::present(const VideoState& video) {
     present(video.frame().data(),VideoState::width,VideoState::height);
 }
-void GLPresenter::present(const uint8_t* indices,unsigned image_width,unsigned image_height) {
+void GLPresenter::present(const nes::frontend::FrameSnapshot& snapshot) {
     auto& g=*impl_;
-    original_rgba(indices,image_width,image_height,g.rgba);
+    if(!snapshot.valid()){present(snapshot.pixels().data(),256,240);return;}
+    const bool upload=g.cached_publication!=snapshot.publication();
+    if(present_pixels(snapshot.pixels().data(),256,240,upload)) {
+        g.cached_publication=snapshot.publication();
+        if(!upload && g.timing)g.timing->record(nes::frontend::TimingCount::cached_draws);
+    }
+}
+void GLPresenter::present(const uint8_t* indices,unsigned image_width,unsigned image_height) {
+    impl_->cached_publication=0; // Raw/video paths may overwrite the same texture.
+    present_pixels(indices,image_width,image_height,true);
+}
+bool GLPresenter::present_pixels(const uint8_t* indices,unsigned image_width,unsigned image_height,bool upload) {
+    auto& g=*impl_;
+    if(upload) { auto& metrics=g.timing?*g.timing:g.disabled_timing;
+      nes::frontend::FrontendTiming::Scope measure(metrics,nes::frontend::TimingStage::conversion);
+      original_rgba(indices,image_width,image_height,g.rgba);
+      metrics.record(nes::frontend::TimingCount::nes_conversions); }
     int width=0,height=0;SDL_GL_GetDrawableSize(g.window,&width,&height);
     glViewport(0,0,width,height);glClearColor(0,0,0,1);glClear(GL_COLOR_BUFFER_BIT);
     const auto viewport=original_viewport(width,height,
         (SDL_GetWindowFlags(g.window)&SDL_WINDOW_FULLSCREEN)!=0);
-    if(!viewport.width || !viewport.height)return;
+    if(!viewport.width || !viewport.height)return false;
     glViewport(viewport.x,viewport.y,viewport.width,viewport.height);
     g.use_program(g.program);g.bind_vao(g.vao);glBindTexture(GL_TEXTURE_2D,g.texture);
-    glTexSubImage2D(GL_TEXTURE_2D,0,0,0,static_cast<GLsizei>(image_width),static_cast<GLsizei>(image_height),GL_RGBA,GL_UNSIGNED_BYTE,g.rgba.data());
+    if(upload) { auto& metrics=g.timing?*g.timing:g.disabled_timing;
+      nes::frontend::FrontendTiming::Scope measure(metrics,nes::frontend::TimingStage::upload);
+      glTexSubImage2D(GL_TEXTURE_2D,0,0,0,static_cast<GLsizei>(image_width),static_cast<GLsizei>(image_height),GL_RGBA,GL_UNSIGNED_BYTE,g.rgba.data());
+      metrics.record(nes::frontend::TimingCount::nes_uploads); }
     glDrawArrays(GL_TRIANGLES,0,6);
+    if(g.timing)g.timing->record(nes::frontend::TimingCount::nes_draws);
     if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL presentation failed");
+    return true;
 }
 void GLPresenter::present_overlay(const nes::ui::FrontendUI& ui,double now) {
     const auto bitmap=nes::ui::overlay_bitmap(ui,now);if(!bitmap.width)return;
@@ -110,6 +136,7 @@ void GLPresenter::present_overlay(const nes::ui::FrontendUI& ui,double now) {
     g.use_program(g.program);g.bind_vao(g.ui_vao);g.bind_buffer(GL_ARRAY_BUFFER,g.ui_buffer);g.buffer_data(GL_ARRAY_BUFFER,sizeof v,v,GL_DYNAMIC_DRAW);
     glBindTexture(GL_TEXTURE_2D,g.ui_texture);glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,bitmap.width,bitmap.height,0,GL_RGBA,GL_UNSIGNED_BYTE,bitmap.rgba.data());
     glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDrawArrays(GL_TRIANGLES,0,6);glDisable(GL_BLEND);
+    if(g.timing)g.timing->record(nes::frontend::TimingCount::ui_draws);
     glViewport(old_viewport[0],old_viewport[1],old_viewport[2],old_viewport[3]);
     if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL UI overlay failed");
 }

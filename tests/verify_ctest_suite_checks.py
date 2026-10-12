@@ -22,6 +22,14 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            'high_refresh_evidence_contract': 'Ran 7 tests',
+            'frontend_presentation_schedule': 'Presentation clock schedule cases=12 PASS',
+            'frontend_presentation_snapshot': 'Presentation clock snapshot cases=7 PASS',
+            'frontend_presentation_native': 'Frontend scheduled native cases=9 PASS',
+            'frontend_timing_metrics': 'Frontend timing metrics cases=9 PASS',
+            'frontend_timing_clock_contract': 'Frontend timing clock_contract cases=6 PASS',
+            'frontend_timing_source_contract': 'Ran 5 tests',
+            'frontend_timing_native_contract': 'Frontend timing native cases=8 PASS',
             'frontend_ui_banner': 'Frontend banner cases=9 PASS',
             'frontend_ui_quit': 'Frontend quit cases=18 PASS',
             'frontend_ui_bitmap': 'Frontend bitmap cases=8 PASS',

@@ -6,6 +6,8 @@
 #include "runtime/gl_presenter.hpp"
 #include "runtime/original_presentation.hpp"
 #include "runtime/frontend_events.hpp"
+#include "runtime/frontend_timing.hpp"
+#include "runtime/presentation_clock.hpp"
 #include "runtime/ui_text.hpp"
 #include "runtime/sdl_audio_output.hpp"
 #include "runtime/wav_writer.hpp"
@@ -21,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <string>
 
@@ -34,7 +37,11 @@ static void show_error(const std::string& message) {
         (std::string(nes::ui::text::load_error)+"\n\n"+message+"\n\n"+nes::ui::text::experimental).c_str(), nullptr);
 #endif
 }
+using nes::frontend::FrontendTiming;
+using nes::frontend::TimingCount;
+using nes::frontend::TimingStage;
 int main(int argc,char** argv) {
+ FrontendTiming timing;uint64_t nes_frames=0;
  std::ofstream diagnostic_output;
  nes::game::GameplayDiagnostic diagnostic;
  try {
@@ -46,8 +53,9 @@ int main(int argc,char** argv) {
     // Desktop-sized borderless fullscreen avoids Cocoa Space transitions.
     SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES,"0");
 #endif
+    unsigned experimental_refresh=0;
     uint64_t limit=0;bool fast=false,mute=false,fullscreen=false;std::string mod_path,capture,audio_path;
-    bool god_enabled=false,diagnostic_requested=false;
+    bool god_enabled=false,diagnostic_requested=false,timing_requested=false;
     for(int i=1;i<argc;++i){const std::string option=argv[i];if(option=="--unthrottled"){fast=true;continue;}
 #ifdef NES_USER_ROM
         if(option=="--import-only")continue;
@@ -57,10 +65,12 @@ int main(int argc,char** argv) {
         if(option=="--fullscreen"){fullscreen=true;continue;}
         if(option=="--mute"){mute=true;continue;}
         if(option=="--diagnostic"){diagnostic_requested=true;continue;}
+        if(option=="--timing-diagnostic"){timing_requested=true;continue;}
         if(option=="--god"){god_enabled=true;continue;}
         if(option=="--no-god"){god_enabled=false;continue;}
         if(i+1>=argc)throw std::invalid_argument("Option requires a value");
-        if(option=="--frames")limit=std::stoull(argv[++i]);else if(option=="--mod")mod_path=argv[++i];
+        if(option=="--experimental-present-hz")experimental_refresh=nes::frontend::parse_experimental_refresh(argv[++i]);
+        else if(option=="--frames")limit=std::stoull(argv[++i]);else if(option=="--mod")mod_path=argv[++i];
         else if(option=="--capture")capture=argv[++i];else if(option=="--audio-output")audio_path=argv[++i];else throw std::invalid_argument("Unknown desktop option");}
     if(diagnostic_requested) {
         try {
@@ -89,8 +99,13 @@ int main(int argc,char** argv) {
     if(!context.value)throw std::runtime_error(SDL_GetError());
     // PAL pacing below owns the clock. A Cocoa display-link wait can stop
     // receiving callbacks for a background/offscreen window and block input.
-    SDL_GL_SetSwapInterval(0);
-    nes::runtime::GLPresenter presenter(window.get());
+    const int swap_request_result=SDL_GL_SetSwapInterval(0);
+    if(timing_requested) {
+        SDL_DisplayMode display{};const int mode_result=SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(window.get()),&display);
+        std::cout<<"Presentation display: reported_hz="<<display.refresh_rate<<" mode_result="<<mode_result
+            <<" swap_request_result="<<swap_request_result<<" swap_interval="<<SDL_GL_GetSwapInterval()<<'\n';
+    }
+    nes::runtime::GLPresenter presenter(window.get(),timing_requested?&timing:nullptr);
     std::cout<<"OpenGL "<<presenter.version()<<"; statically recompiled C game; PAL runtime\n";
     nes::runtime::Bus bus({&game_prg_data[0][0],131072u,game_chr_data,131072u});
     CPUState cpu=cpu_initial_state(game_reset_vector);RuntimeServices services=bus.services();
@@ -114,19 +129,26 @@ int main(int argc,char** argv) {
     Controller controller;for(int i=0;i<SDL_NumJoysticks();++i)if(SDL_IsGameController(i)){controller.value=SDL_GameControllerOpen(i);break;}
     bool running=true;const Uint64 frequency=SDL_GetPerformanceFrequency();
     double next_deadline=static_cast<double>(SDL_GetPerformanceCounter());
-    uint64_t presented=0;bool frontend_paused=false;
+    bool frontend_paused=false;
+    // --unthrottled retains the original one-NES-unit/one-draw fast path.
+    std::optional<nes::frontend::PresentationClock> presentation_clock;
+    nes::frontend::FrameSnapshot snapshot;
+    if(experimental_refresh && !fast)presentation_clock.emplace(frequency,experimental_refresh,static_cast<uint64_t>(next_deadline));
+    if(experimental_refresh)std::cout<<"Experimental presentation: "<<experimental_refresh<<" Hz; repeat complete PAL frames; "
+        <<(fast?"bypassed by --unthrottled":"independent host deadlines")<<'\n';
+    if(timing_requested)timing.start(frequency,[](void*) noexcept {return static_cast<uint64_t>(SDL_GetPerformanceCounter());},nullptr,fast);
     nes::ui::FrontendUI ui;nes::ui::FrontendEvents ui_events(ui);
     const auto seconds=[&]{return static_cast<double>(SDL_GetPerformanceCounter())/frequency;};
 
-    while(running&&(!limit||presented<limit)) {
+    while(running&&(!limit||nes_frames<limit)) {
         ui.begin_events();
         int ww=0,wh=0,dw=0,dh=0;SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
         SDL_Event event;while(SDL_PollEvent(&event)) {
             SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
             const auto modal_keys=nes::ui::modal_pressed_count(SDL_GetKeyboardState(nullptr),controller.value);
             ui_events.handle(event,ww,wh,dw,dh,modal_keys>1||(event.type==SDL_MOUSEBUTTONUP&&modal_keys>0));
-            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
-            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());}
+            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());timing.record(TimingCount::diagnostic_frames);}
+            if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());timing.record(TimingCount::diagnostic_frames);}
             if(event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_F11){
                 const Uint32 flag=(SDL_GetWindowFlags(window.get())&SDL_WINDOW_FULLSCREEN)?0:SDL_WINDOW_FULLSCREEN_DESKTOP;
                 if(SDL_SetWindowFullscreen(window.get(),flag)!=0)throw std::runtime_error(SDL_GetError());
@@ -140,38 +162,101 @@ int main(int argc,char** argv) {
         if(frontend_paused!=ui.paused()) {
             frontend_paused=ui.paused();std::cout<<(frontend_paused?"Gameplay paused":"Gameplay resumed")<<"; CPU cycle="<<bus.cycles()<<"; PPU frame="<<bus.video().frames()<<"; audio_paused="<<audio_output.paused()<<'\n'<<std::flush;
         }
+        if(presentation_clock)presentation_clock->set_paused(ui.paused(),SDL_GetPerformanceCounter());
         if(ui.paused()) {
-            bus.set_buttons(0,0);presenter.present(bus.video());presenter.present_overlay(ui,seconds());
-            SDL_GL_SwapWindow(window.get());next_deadline=static_cast<double>(SDL_GetPerformanceCounter());SDL_Delay(10);continue;
+            if(presentation_clock) {
+                bus.set_buttons(0,0);
+                timing.record(TimingCount::paused_iterations);
+                if(presentation_clock->poll(SDL_GetPerformanceCounter()).present) {
+                    { FrontendTiming::Scope measure(timing,TimingStage::render);
+                      presenter.present(snapshot);presenter.present_overlay(ui,seconds());
+                      timing.record(TimingCount::render_passes);timing.record(TimingCount::paused_render_passes); }
+                    { FrontendTiming::Scope measure(timing,TimingStage::swap);
+                      SDL_GL_SwapWindow(window.get());timing.record(TimingCount::swaps); }
+                    presentation_clock->presentation_complete(SDL_GetPerformanceCounter());
+                }
+                { FrontendTiming::Scope measure(timing,TimingStage::wait);SDL_Delay(1); }
+                continue;
+            }
+            bus.set_buttons(0,0);
+            timing.record(TimingCount::paused_iterations);
+            { FrontendTiming::Scope measure(timing,TimingStage::render);
+              presenter.present(bus.video());presenter.present_overlay(ui,seconds());
+              timing.record(TimingCount::render_passes);timing.record(TimingCount::paused_render_passes); }
+            { FrontendTiming::Scope measure(timing,TimingStage::swap);
+              SDL_GL_SwapWindow(window.get());timing.record(TimingCount::swaps); }
+            { FrontendTiming::Scope measure(timing,TimingStage::wait);
+              next_deadline=static_cast<double>(SDL_GetPerformanceCounter());SDL_Delay(10); }continue;
         }
+        const bool simulate=!presentation_clock || presentation_clock->poll(SDL_GetPerformanceCounter()).simulate;
+        if(simulate) {
+        FrontendTiming::Scope simulation_measure(timing,TimingStage::simulation);
         bus.set_buttons(0,ui.game_input_enabled()?nes::ui::game_buttons(SDL_GetKeyboardState(nullptr),controller.value):0);
 #ifdef NES_ENABLE_MODS
-        mods.frame(cpu);
+        mods.frame(cpu);timing.record(TimingCount::mod_hooks);
 #endif
-        god.begin_frame();
+        god.begin_frame();timing.record(TimingCount::god_hooks);
         const uint64_t before=bus.video().frames();
         while(bus.video().frames()==before) {
+            timing.record(TimingCount::native_slices);
             uint32_t budget=1000;if(!game_execute_slice(&cpu,&services,&budget)){
-                diagnostic.missing_address(cpu);diagnostic.end("uncovered_address");
+                diagnostic.missing_address(cpu);diagnostic.end("uncovered_address");simulation_measure.stop();
+                timing.report(std::cout,"uncovered_address",nes_frames);
                 show_error("Uncovered native routine: bank "+std::to_string(bus.cartridge().bank_for_pc(cpu.PC))+", PC "+std::to_string(cpu.PC));return 2;}
-            diagnostic.slice(cpu);
+            diagnostic.slice(cpu);timing.record(TimingCount::diagnostic_slices);
         }
-        diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());
+        diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());timing.record(TimingCount::diagnostic_frames);
         if(diagnostic.failed()&&diagnostic_requested){std::cerr<<"Gameplay diagnostic stopped: output write failed; session evidence is incomplete\n";diagnostic_requested=false;}
-        bus.video().consume_frame();auto samples=bus.audio().take_samples();audio_output.submit(samples);if(wav)wav->append(samples);
-        if(!presented)ui.start(seconds());
-        presenter.present(bus.video());presenter.present_overlay(ui,seconds());++presented;
-        if(limit&&presented==limit&&!capture.empty())presenter.capture(capture);
-        SDL_GL_SwapWindow(window.get());
-        if(!fast){
+        bus.video().consume_frame();
+        timing.record(TimingCount::nes_frames);timing.record(TimingCount::ppu_frames,bus.video().frames()-before);
+        simulation_measure.stop();
+        FrontendTiming::Scope audio_measure(timing,TimingStage::audio);
+        auto samples=bus.audio().take_samples();audio_output.submit(samples);
+        timing.record(TimingCount::audio_batches);timing.record(TimingCount::pcm_samples,samples.size());
+        if(wav){wav->append(samples);timing.record(TimingCount::wav_batches);}
+        audio_measure.stop();
+        if(!nes_frames)ui.start(seconds());
+        if(presentation_clock) {
+            // Publish only after the unchanged NES/hooks/diagnostic/audio unit.
+            snapshot.complete(bus.video().frame(),nes_frames+1,bus.video().frames(),bus.cycles(),SDL_GetPerformanceCounter());
+            presentation_clock->simulation_complete(SDL_GetPerformanceCounter());
+        }
+        }
+        const bool final_frame=simulate && limit && nes_frames+1==limit;
+        const bool draw=!presentation_clock || (snapshot.valid() && (final_frame || presentation_clock->poll(SDL_GetPerformanceCounter()).present));
+        if(draw) {
+        { FrontendTiming::Scope measure(timing,TimingStage::render);
+          if(presentation_clock)presenter.present(snapshot);
+          else presenter.present(bus.video());
+          presenter.present_overlay(ui,seconds());timing.record(TimingCount::render_passes); }
+        }
+        if(simulate)++nes_frames;
+        if(limit&&nes_frames==limit&&!capture.empty()){
+            FrontendTiming::Scope measure(timing,TimingStage::capture);
+            presenter.capture(capture);timing.record(TimingCount::captures);
+        }
+        if(draw) {
+        { FrontendTiming::Scope measure(timing,TimingStage::swap);
+          SDL_GL_SwapWindow(window.get());timing.record(TimingCount::swaps); }
+        if(presentation_clock)presentation_clock->presentation_complete(SDL_GetPerformanceCounter());
+        }
+        if(presentation_clock) {
+            FrontendTiming::Scope measure(timing,TimingStage::wait);
+            if(final_frame) {
+                // Preserve the final PAL wait after capture/swap for --frames.
+                while(static_cast<double>(SDL_GetPerformanceCounter())<presentation_clock->simulation_deadline())SDL_Delay(1);
+            } else if(static_cast<double>(SDL_GetPerformanceCounter())<presentation_clock->next_deadline())SDL_Delay(1);
+        } else if(!fast){
+            FrontendTiming::Scope measure(timing,TimingStage::wait);
             next_deadline=nes::runtime::next_pal_deadline(next_deadline,static_cast<double>(frequency),static_cast<double>(SDL_GetPerformanceCounter()));
             while(static_cast<double>(SDL_GetPerformanceCounter())<next_deadline)SDL_Delay(1);}
     }
     if(wav)wav->finish();
-    diagnostic.end(limit&&presented==limit?"frame_limit":"user_quit");
+    diagnostic.end(limit&&nes_frames==limit?"frame_limit":"user_quit");
     if(diagnostic.failed()&&diagnostic_requested)std::cerr<<"Gameplay diagnostic incomplete: output write failed\n";
-    std::cout<<"Presented "<<presented<<" frames; screen="<<static_cast<unsigned>(bus.ram().read(0x045B))<<"; NMI="<<bus.nmi_count()<<"; DMA="<<bus.dma_count()<<"; DMC="<<bus.dmc_dma_count()<<"; audio_samples="<<bus.audio().produced_samples()<<"; device_submitted="<<audio_output.submitted_samples()<<"; device_skipped="<<audio_output.skipped_samples()<<"; queued_bytes="<<audio_output.queued_bytes()<<'\n';
+    std::cout<<"Presented "<<nes_frames<<" frames; screen="<<static_cast<unsigned>(bus.ram().read(0x045B))<<"; NMI="<<bus.nmi_count()<<"; DMA="<<bus.dma_count()<<"; DMC="<<bus.dmc_dma_count()<<"; audio_samples="<<bus.audio().produced_samples()<<"; device_submitted="<<audio_output.submitted_samples()<<"; device_skipped="<<audio_output.skipped_samples()<<"; queued_bytes="<<audio_output.queued_bytes()<<'\n';
     std::cout<<"God mode="<<god.enabled()<<"; blocked_damage="<<god.blocked_damage()<<"; rescues="<<god.rescues()<<'\n';
+    timing.report(std::cout,limit&&nes_frames==limit?"frame_limit":"user_quit",nes_frames);
     return 0;
- } catch(const std::exception& error){diagnostic.error("runtime_exception");diagnostic.end("exception");show_error(error.what());return 1;}
+ } catch(const std::exception& error){diagnostic.error("runtime_exception");diagnostic.end("exception");timing.report(std::cout,"exception",nes_frames);show_error(error.what());return 1;}
 }
