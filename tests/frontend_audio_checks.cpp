@@ -4,6 +4,7 @@
 #include <stdexcept>
 using nes::runtime::SDLAudioOutput;
 int main(){try{
+ SDL_SetMainReady();
  SDLAudioOutput output(true);if(!output.available())throw std::runtime_error("mandatory dummy audio device");
  output.set_paused(true);output.submit(std::vector<float>(2400,0.25f));const auto queued=output.queued_bytes();SDL_Delay(50);
  if(!output.paused()||!queued||output.queued_bytes()!=queued)throw std::runtime_error("modal pause consumed queued samples");

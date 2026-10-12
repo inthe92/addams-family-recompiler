@@ -51,6 +51,8 @@ ctest --test-dir build-headless --verbose --output-on-failure
 
 ## Modified components and remaining verification
 
+Review of SDL's Windows entry-point contract also added `SDL_MAIN_HANDLED` and `SDL_SetMainReady()` to the new audio harness, consistent with the existing SDL test targets. The preliminary CI run was cancelled to avoid producing superseded packages. Only results for the final commit qualify for publication.
+
 Version/header and CMake; desktop app; frontend state/event/text/bitmap files; GL overlay; SDL audio pause; ROM selection/progress and importer messages; diagnostic version header; frontend tests and existing package-language expectations; CTest inventory gate; READMEs, Windows instructions and project status. Existing unrelated local reports are preserved and excluded from this task's commit.
 
 Windows x64, macOS ARM64/Intel and Linux x64 must each perform a fresh native build, all 43 CTest entries and their existing package checks on the new SHA. Independent packaging steps remain enabled despite A02; the overall workflow must remain red for that failure. Validate package identity/version/ABI/icons, synthetic import/module loading and clean extraction before release. Physical controller navigation, Alt+F4, Linux/Steam Deck compatible-ROM play, resizing and platform-specific visual checks still need hands-on testing where no graphical session is available. No universal game compatibility or stable 1.0 claim is made.
