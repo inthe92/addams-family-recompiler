@@ -115,6 +115,8 @@ jobs:
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
+          # Build identity needs the runner's Git for Windows, absent from minimal PATH.
+          path-type: inherit
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-gcc
@@ -129,6 +131,7 @@ jobs:
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
           cmake --build build --parallel 4
+          python -B -c 'import json,os,sys; from pathlib import Path; sys.path.insert(0,"tools/public"); from build_identity import validate; data=json.loads(Path("build/native-build-info.json").read_text()); print(json.dumps(data,sort_keys=True)); validate(data,os.environ["GITHUB_SHA"])'
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
           python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
       - name: Run complete CTest suite
@@ -143,6 +146,7 @@ jobs:
         with:
           name: ctest-windows-x64
           path: |
+            build/native-build-info.json
             build/ctest-inventory.json
             build/ctest-results.xml
             build/Testing/Temporary/LastTest.log
