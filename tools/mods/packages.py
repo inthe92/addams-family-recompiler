@@ -59,6 +59,14 @@ def manifest(data):
     if not isinstance(data['entry'], str) or safe_name(data['entry']) != 'main.lua': raise ValueError('Entry must be main.lua')
     return data
 
+def zip_name(info):
+    # CPython keeps the archive name in orig_filename before Windows separator
+    # normalization/NUL truncation. Validate it before trusting filename.
+    name = safe_name(info.orig_filename)
+    if info.filename != info.orig_filename:
+        raise ValueError('Normalized or alternate ZIP path forbidden')
+    return name
+
 def atomic_json(path, data):
     fd, name = tempfile.mkstemp(prefix='.state-', dir=path.parent)
     try:
@@ -127,7 +135,7 @@ class Store:
                 if not 2 <= len(infos) <= MAX_FILES: raise ValueError('Invalid ZIP file count')
                 names = {}; total = 0
                 for i in infos:
-                    n = safe_name(i.filename); key = n.lower()
+                    n = zip_name(i); key = n.lower()
                     if key in names: raise ValueError('Duplicate ZIP path')
                     names[key] = i
                     kind = stat.S_IFMT(i.external_attr >> 16)
@@ -151,7 +159,7 @@ class Store:
                 stage = Path(tempfile.mkdtemp(prefix='.install-', dir=self.root))
                 try:
                     for i in infos:
-                        n = safe_name(i.filename); dest = stage / n
+                        n = zip_name(i); dest = stage / n
                         if i.is_dir(): dest.mkdir(parents=True, exist_ok=True); continue
                         dest.parent.mkdir(parents=True, exist_ok=True)
                         with z.open(i) as src, dest.open('xb') as out:

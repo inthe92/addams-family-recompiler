@@ -5,6 +5,7 @@ from pathlib import Path
 import stat
 import tempfile
 import unittest
+from unittest import mock
 import zipfile
 import zlib
 ROOT = Path(__file__).resolve().parents[1]
@@ -21,7 +22,15 @@ class Packages(unittest.TestCase):
         self.counter += 1; p = self.base/('input%d.zip'%self.counter)
         with zipfile.ZipFile(p,'w',zipfile.ZIP_DEFLATED) as z:
             z.writestr('mod.json',json.dumps(data or self.manifest)); z.writestr('main.lua','function on_update(dt) end')
-            for name, contents in extras: z.writestr(name, contents)
+            for name, contents in extras:
+                if isinstance(name, str):
+                    # Preserve malformed raw archive names on Windows too;
+                    # ZipInfo normally sanitizes separators/NUL at construction.
+                    info = zipfile.ZipInfo(name)
+                    info.filename = info.orig_filename = name
+                    info.compress_type = zipfile.ZIP_DEFLATED
+                    name = info
+                z.writestr(name, contents)
         return p
     def reject(self, extras=(), data=None):
         with self.assertRaises((ValueError,zipfile.BadZipFile)): self.store.install(self.archive(extras,data))
@@ -43,10 +52,21 @@ class Packages(unittest.TestCase):
         with self.assertRaises(ValueError): self.store.install(self.archive())
         self.assertEqual((self.store.packages/'test.hello/main.lua').read_bytes(),before)
     def test_traversal(self):
-        for name in ('../outside.txt','assets/../../bad.txt','/bad.txt','assets//bad.txt','assets/./bad.txt'):
+        for name in ('../outside.txt','assets/../../bad.txt','/bad.txt','assets//bad.txt','assets/./bad.txt','assets/good.txt\0hidden'):
             self.reject([(name,'bad')])
     def test_windows_paths(self):
         for name in ('C:/bad.txt','assets\\bad.txt','assets/CON.txt','assets/LPT1.txt','assets/file.txt:stream','assets/end.','assets/end '): self.reject([(name,'bad')])
+        archive = self.archive([('assets\\bad.txt', 'bad')])
+        base_info = zipfile.ZipInfo
+        class WindowsNormalizedInfo(base_info):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.filename = self.filename.replace('\\', '/')
+        # Reproduce the reader's Windows normalization on every host. Keep the
+        # raw ZIP and rejection contract, rather than accepting a sanitized name.
+        with mock.patch.object(zipfile, 'ZipInfo', WindowsNormalizedInfo):
+            with self.assertRaises(ValueError): self.store.install(archive)
+        self.assertEqual(self.store.installed(), [])
     def test_case_duplicate(self): self.reject([('assets/test.txt','a'),('assets/TEST.txt','b')])
     def test_exact_duplicate(self): self.reject([('main.lua','replace')])
     def test_links(self):
