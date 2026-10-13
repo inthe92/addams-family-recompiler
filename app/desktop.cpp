@@ -18,6 +18,8 @@
 #endif
 #ifdef NES_ENABLE_MODS
 #include "runtime/mod_engine.hpp"
+#include "runtime/mod_frontend.hpp"
+#include "game/mod_observation.hpp"
 #endif
 #include <SDL.h>
 #include <fstream>
@@ -53,7 +55,7 @@ int main(int argc,char** argv) {
     // Desktop-sized borderless fullscreen avoids Cocoa Space transitions.
     SDL_SetHint(SDL_HINT_VIDEO_MAC_FULLSCREEN_SPACES,"0");
 #endif
-    unsigned experimental_refresh=0;
+    unsigned experimental_refresh=0;bool no_mods=false,mods_only=false;std::string mods_directory;
     uint64_t limit=0;bool fast=false,mute=false,fullscreen=false;std::string mod_path,capture,audio_path;
     bool god_enabled=false,diagnostic_requested=false,timing_requested=false;
     for(int i=1;i<argc;++i){const std::string option=argv[i];if(option=="--unthrottled"){fast=true;continue;}
@@ -62,6 +64,8 @@ int main(int argc,char** argv) {
         if(option=="--rom"||option=="--import-cache"||option=="--import-tools"){++i;continue;}
         if(option.rfind("-psn_",0)==0)continue;
 #endif
+        if(option=="--no-mods"){no_mods=true;continue;}
+        if(option=="--mods-only"){mods_only=true;continue;}
         if(option=="--fullscreen"){fullscreen=true;continue;}
         if(option=="--mute"){mute=true;continue;}
         if(option=="--diagnostic"){diagnostic_requested=true;continue;}
@@ -69,9 +73,18 @@ int main(int argc,char** argv) {
         if(option=="--god"){god_enabled=true;continue;}
         if(option=="--no-god"){god_enabled=false;continue;}
         if(i+1>=argc)throw std::invalid_argument("Option requires a value");
-        if(option=="--experimental-present-hz")experimental_refresh=nes::frontend::parse_experimental_refresh(argv[++i]);
+        if(option=="--mods-dir")mods_directory=argv[++i];
+        else if(option=="--experimental-present-hz")experimental_refresh=nes::frontend::parse_experimental_refresh(argv[++i]);
         else if(option=="--frames")limit=std::stoull(argv[++i]);else if(option=="--mod")mod_path=argv[++i];
         else if(option=="--capture")capture=argv[++i];else if(option=="--audio-output")audio_path=argv[++i];else throw std::invalid_argument("Unknown desktop option");}
+    if(mods_only){
+#ifdef NES_ENABLE_MODS
+        return nes::mods::manager_window(no_mods,mods_directory);
+#else
+        throw std::runtime_error("Mod Manager disabled in this build");
+#endif
+    }
+    if(no_mods)mod_path.clear();
     if(diagnostic_requested) {
         try {
             const auto preferences=std::unique_ptr<char,decltype(&SDL_free)>(SDL_GetPrefPath("nes-native-lab","diagnostics"),SDL_free);
@@ -122,7 +135,8 @@ int main(int argc,char** argv) {
     std::unique_ptr<nes::runtime::WavWriter> wav;
     if(!audio_path.empty())wav=std::make_unique<nes::runtime::WavWriter>(audio_path,nes::runtime::AudioState::sample_rate);
 #ifdef NES_ENABLE_MODS
-    nes::runtime::ModEngine mods(bus);if(!mod_path.empty())mods.load_file(mod_path);
+    nes::runtime::ModEngine mods(bus);if(!no_mods&&!mod_path.empty())mods.load_file(mod_path);
+    nes::mods::Frontend managed_mods(no_mods,mods_directory);
 #else
     if(!mod_path.empty())throw std::runtime_error("Lua support is disabled in this build");
 #endif
@@ -142,10 +156,19 @@ int main(int argc,char** argv) {
 
     while(running&&(!limit||nes_frames<limit)) {
         ui.begin_events();
+#ifdef NES_ENABLE_MODS
+        managed_mods.begin_events();
+#endif
         int ww=0,wh=0,dw=0,dh=0;SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
         SDL_Event event;while(SDL_PollEvent(&event)) {
             SDL_GetWindowSize(window.get(),&ww,&wh);SDL_GL_GetDrawableSize(window.get(),&dw,&dh);
             const auto modal_keys=nes::ui::modal_pressed_count(SDL_GetKeyboardState(nullptr),controller.value);
+#ifdef NES_ENABLE_MODS
+            if(event.type==SDL_KEYDOWN&&event.key.keysym.sym==SDLK_F2&&!event.key.repeat&&!ui.modal())audio_output.set_paused(true);
+            if(event.type==SDL_CONTROLLERBUTTONDOWN&&event.cbutton.button==SDL_CONTROLLER_BUTTON_RIGHTSTICK&&!ui.modal())audio_output.set_paused(true);
+            if(!ui.modal()&&managed_mods.handle(event,ww,wh,dw,dh)){ui.external_pause(managed_mods.visible());continue;}
+            ui.external_pause(managed_mods.visible());
+#endif
             ui_events.handle(event,ww,wh,dw,dh,modal_keys>1||(event.type==SDL_MOUSEBUTTONUP&&modal_keys>0));
             if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_g){god.set_enabled(!god.enabled());update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());timing.record(TimingCount::diagnostic_frames);}
             if(debug_controls&&!ui.paused()&&ui.game_input_enabled()&&event.type==SDL_KEYDOWN&&!event.key.repeat&&event.key.keysym.sym==SDLK_h){god.grant_all_items();update_title();diagnostic.frame(cpu,god.enabled(),god.all_items(),!mod_path.empty());timing.record(TimingCount::diagnostic_frames);}
@@ -170,6 +193,9 @@ int main(int argc,char** argv) {
                 if(presentation_clock->poll(SDL_GetPerformanceCounter()).present) {
                     { FrontendTiming::Scope measure(timing,TimingStage::render);
                       presenter.present(snapshot);presenter.present_overlay(ui,seconds());
+#ifdef NES_ENABLE_MODS
+                      managed_mods.draw(presenter,dw,dh);
+#endif
                       timing.record(TimingCount::render_passes);timing.record(TimingCount::paused_render_passes); }
                     { FrontendTiming::Scope measure(timing,TimingStage::swap);
                       SDL_GL_SwapWindow(window.get());timing.record(TimingCount::swaps); }
@@ -182,6 +208,9 @@ int main(int argc,char** argv) {
             timing.record(TimingCount::paused_iterations);
             { FrontendTiming::Scope measure(timing,TimingStage::render);
               presenter.present(bus.video());presenter.present_overlay(ui,seconds());
+#ifdef NES_ENABLE_MODS
+                      managed_mods.draw(presenter,dw,dh);
+#endif
               timing.record(TimingCount::render_passes);timing.record(TimingCount::paused_render_passes); }
             { FrontendTiming::Scope measure(timing,TimingStage::swap);
               SDL_GL_SwapWindow(window.get());timing.record(TimingCount::swaps); }
@@ -193,7 +222,8 @@ int main(int argc,char** argv) {
         FrontendTiming::Scope simulation_measure(timing,TimingStage::simulation);
         bus.set_buttons(0,ui.game_input_enabled()?nes::ui::game_buttons(SDL_GetKeyboardState(nullptr),controller.value):0);
 #ifdef NES_ENABLE_MODS
-        mods.frame(cpu);timing.record(TimingCount::mod_hooks);
+        if(!no_mods){mods.frame(cpu);timing.record(TimingCount::mod_hooks);}
+        managed_mods.update(nes::game::mod_observation(bus));
 #endif
         god.begin_frame();timing.record(TimingCount::god_hooks);
         const uint64_t before=bus.video().frames();
@@ -228,7 +258,11 @@ int main(int argc,char** argv) {
         { FrontendTiming::Scope measure(timing,TimingStage::render);
           if(presentation_clock)presenter.present(snapshot);
           else presenter.present(bus.video());
-          presenter.present_overlay(ui,seconds());timing.record(TimingCount::render_passes); }
+          presenter.present_overlay(ui,seconds());
+#ifdef NES_ENABLE_MODS
+                      managed_mods.draw(presenter,dw,dh);
+#endif
+          timing.record(TimingCount::render_passes); }
         }
         if(simulate)++nes_frames;
         if(limit&&nes_frames==limit&&!capture.empty()){

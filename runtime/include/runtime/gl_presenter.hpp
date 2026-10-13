@@ -19,6 +19,7 @@ public:
     // Reject extended/cropped buffers; production presentation is always 256 x 240.
     void present(const uint8_t* indices, unsigned width, unsigned height);
     void present_overlay(const nes::ui::FrontendUI& ui, double monotonic_seconds);
+    void present_panel(const nes::ui::Bitmap& bitmap,nes::ui::Rect rect);
     void capture(const std::string& path);
     const char* version() const;
 private:

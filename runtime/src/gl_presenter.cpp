@@ -127,8 +127,13 @@ bool GLPresenter::present_pixels(const uint8_t* indices,unsigned image_width,uns
 }
 void GLPresenter::present_overlay(const nes::ui::FrontendUI& ui,double now) {
     const auto bitmap=nes::ui::overlay_bitmap(ui,now);if(!bitmap.width)return;
-    auto& g=*impl_;int w=0,h=0;SDL_GL_GetDrawableSize(g.window,&w,&h);if(w<=0||h<=0)return;
+    int w=0,h=0;SDL_GL_GetDrawableSize(impl_->window,&w,&h);
     const auto r=nes::ui::overlay_rect(w,h,ui.modal());
+    present_panel(bitmap,r);
+}
+void GLPresenter::present_panel(const nes::ui::Bitmap& bitmap,nes::ui::Rect r) {
+    if(!bitmap.width||!bitmap.height||!r.width||!r.height)return;
+    auto& g=*impl_;int w=0,h=0;SDL_GL_GetDrawableSize(g.window,&w,&h);if(w<=0||h<=0)return;
     const float left=2.0f*r.x/w-1,right=2.0f*(r.x+r.width)/w-1;
     const float top=1-2.0f*r.y/h,bottom=1-2.0f*(r.y+r.height)/h;
     const float v[]={left,bottom,0,1,right,bottom,1,1,right,top,1,0,left,bottom,0,1,right,top,1,0,left,top,0,0};

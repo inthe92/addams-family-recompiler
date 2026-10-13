@@ -7,11 +7,11 @@
 #include <string_view>
 namespace nes::ui {
 namespace {
-const char* alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:./-?(),";
+const char* alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:./-?(),>";
 constexpr uint8_t glyphs[][5]={
  {126,9,9,9,126},{127,73,73,73,54},{62,65,65,65,34},{127,65,65,34,28},{127,73,73,73,65},{127,9,9,9,1},{62,65,73,73,122},{127,8,8,8,127},{65,65,127,65,65},{32,64,65,63,1},{127,8,20,34,65},{127,64,64,64,64},{127,2,12,2,127},{127,4,8,16,127},{62,65,65,65,62},{127,9,9,9,6},{62,65,81,33,94},{127,9,25,41,70},{38,73,73,73,50},{1,1,127,1,1},{63,64,64,64,63},{31,32,64,32,31},{63,64,56,64,63},{99,20,8,20,99},{3,4,120,4,3},{97,81,73,69,67},
  {62,81,73,69,62},{0,66,127,64,0},{98,81,73,73,70},{34,65,73,73,54},{24,20,18,127,16},{39,69,69,69,57},{62,73,73,73,48},{1,113,9,5,3},{54,73,73,73,54},{6,73,73,41,30},
- {0,54,54,0,0},{0,96,96,0,0},{32,16,8,4,2},{8,8,8,8,8},{2,1,81,9,6},{0,28,34,65,0},{0,65,34,28,0},{0,80,48,0,0}};
+ {0,54,54,0,0},{0,96,96,0,0},{32,16,8,4,2},{8,8,8,8,8},{2,1,81,9,6},{0,28,34,65,0},{0,65,34,28,0},{0,80,48,0,0},{0,65,34,20,8}};
 void pixel(Bitmap& b,int x,int y,uint8_t r,uint8_t g,uint8_t blue,uint8_t alpha){if(x<0||y<0||x>=int(b.width)||y>=int(b.height))return;auto p=(std::size_t(y)*b.width+x)*4;b.rgba[p]=r;b.rgba[p+1]=g;b.rgba[p+2]=blue;b.rgba[p+3]=alpha;}
 void box(Bitmap& b,Rect r,uint8_t shade,uint8_t alpha){for(int y=r.y;y<r.y+r.height;++y)for(int x=r.x;x<r.x+r.width;++x)pixel(b,x,y,shade,shade,shade,alpha);}
 void words(Bitmap& b,int x,int y,std::string_view text,int scale=2){
@@ -31,4 +31,8 @@ Bitmap overlay_bitmap(const FrontendUI& ui,double now){
  const float alpha=ui.banner_alpha(now);for(std::size_t i=3;i<b.rgba.size();i+=4)b.rgba[i]=static_cast<uint8_t>(b.rgba[i]*alpha);return b;
 }
 Bitmap prompt_bitmap(const char* title,const char* message){auto b=panel(720,180);words(b,20,20,title);words(b,20,58,message,1);return b;}
+Bitmap menu_bitmap(const std::vector<std::string>& lines,const std::vector<std::string>& buttons,unsigned selected){
+ auto b=panel(640,430);for(unsigned i=0;i<lines.size()&&i<12;++i)words(b,16,i==0?16:52+int(i-1)*28,lines[i].substr(0,50),i==0?2:2);
+ for(unsigned i=0;i<buttons.size()&&i<4;++i)button(b,{14+int(i)*156,370,144,42},buttons[i].c_str(),i==selected);return b;
+}
 }

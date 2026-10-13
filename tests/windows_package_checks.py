@@ -19,6 +19,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'tools/public'))
 from icon_assets import verify_windows
 from build_identity import packaged
+from mod_distribution_checks import verify_mod_distribution
 FOLDER = 'NES-Native-Lab-Windows-x86_64'
 
 
@@ -295,6 +296,7 @@ def extracted_checks(resources, directory):
         python = resources / 'toolchain/python/python.exe'
         zig = resources / 'toolchain/zig/zig.exe'
         run([python, '-I', '--version']); run([zig, 'version'])
+        report['mod_distribution'] = verify_mod_distribution(resources, python, directory)
         report['package_identity']=packaged(resources,resources/'nes_native.exe',
             os.environ.get('NES_PACKAGE_EXPECTED_COMMIT') or None,run)
         run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', resources,
@@ -350,7 +352,7 @@ def verify(build, output, report_path, expected_commit=None):
             resources = temp / FOLDER
             verify_windows(resources)
             report['checks']['official_icon'] = 'PASS (ICO bytes and EXE resource payloads)'
-            required = ['nes_native.exe', 'WINDOWS_README.txt', 'LICENSE', 'THIRD_PARTY.md', 'README.md',
+            required = ['tools/mods/packages.py', 'examples/mods/Hello-NES-Native-Lab.zip', 'nes_native.exe', 'WINDOWS_README.txt', 'LICENSE', 'THIRD_PARTY.md', 'README.md',
                         'README.es.md', 'licenses/SDL2-LICENSE.txt', 'licenses/Lua-readme.html',
                         'toolchain/python/python.exe', 'toolchain/zig/zig.exe', 'toolchain/target.json',
                         'toolchain/runtime_tools.json', 'include/recomp/runtime_services.h',

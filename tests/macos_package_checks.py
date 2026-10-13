@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / 'tools/public'))
 from package_platform import macos_deployment_target, validate_macos_deployment
 from icon_assets import verify_macos
 from build_identity import packaged
+from mod_distribution_checks import verify_mod_distribution
 
 
 def verify(args, report):
@@ -90,10 +91,13 @@ def verify(args, report):
                                            minimum=minimum.group(1), load_commands=load,
                                            dependencies=dependencies))
         resources = app / 'Contents/Resources'
+        assert (resources/'tools/mods/packages.py').is_file(), 'Missing mod package helper'
+        assert (resources/'examples/mods/Hello-NES-Native-Lab.zip').is_file(), 'Missing authored example mod'
         python = resources / 'toolchain/python/bin/python3'
         zig = resources / 'toolchain/zig/zig'
         report['python_version'] = run([python, '--version']).strip()
         report['zig_version'] = run([zig, 'version']).strip()
+        report['mod_distribution'] = verify_mod_distribution(resources, python, external)
         run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', resources,
              '--guard-inventory',build/'ctest-inventory.json'])
         report['synthetic_compile_load'] = 'PASS (return 42)'

@@ -15,6 +15,7 @@ sys.path.insert(0,str(ROOT/'tools/public'))
 from build_identity import packaged
 from icon_assets import verify_linux
 from audit_release import audit
+from mod_distribution_checks import verify_mod_distribution
 
 
 def checked_rejection(result, cache):
@@ -76,7 +77,7 @@ def verify(args, report):
         verify_linux(extracted)
         report['official_icons']='PASS (PNG bytes, hicolor, desktop entry and DirIcon)'
         report['release_audit']=audit(extracted)
-        required = ['AppRun', 'usr/bin/nes_native', 'usr/bin/include/recomp/module_abi.h',
+        required = ['usr/bin/tools/mods/packages.py', 'usr/bin/examples/mods/Hello-NES-Native-Lab.zip', 'AppRun', 'usr/bin/nes_native', 'usr/bin/include/recomp/module_abi.h',
                     'usr/bin/toolchain/python/bin/python3', 'usr/bin/toolchain/zig/zig',
                     'usr/bin/LICENSE', 'usr/bin/THIRD_PARTY.md']
         for item in required:
@@ -117,6 +118,7 @@ def verify(args, report):
             report['tool_dependencies'][name]=text
         report['python_version'] = run([python, '--version']).stdout.strip() or run([python, '--version']).stderr.strip()
         report['zig_version'] = run([zig, 'version']).stdout.strip()
+        report['mod_distribution'] = verify_mod_distribution(resources, python, clean)
         smoke_root = Path(name) / 'smoke'
         shutil.copytree(extracted / 'usr/bin', smoke_root)
         run([python, '-B', ROOT / 'tests/public_toolchain_smoke.py', smoke_root,

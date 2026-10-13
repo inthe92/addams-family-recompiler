@@ -1,0 +1,1 @@
+{"id":"example.hello-native-lab","name":"Hello NES Native Lab","version":"1.0.0","api_version":1,"description":"Read-only Lua lifecycle and simulation observation demo.","author":"NES Native Lab","entry":"main.lua"}

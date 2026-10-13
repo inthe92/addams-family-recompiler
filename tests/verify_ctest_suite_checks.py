@@ -22,6 +22,11 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            'mod_frontend_contract': 'Managed frontend cases=11 PASS',
+            'mod_lua_contract': 'Managed Lua cases=24 PASS',
+            'mod_package_contract': 'Ran 25 tests',
+            'mod_store_contract': 'Managed store cases=11 PASS',
+            'mod_native_contract': 'Managed native rates cases=3 PASS',
             'high_refresh_evidence_contract': 'Ran 7 tests',
             'frontend_presentation_schedule': 'Presentation clock schedule cases=12 PASS',
             'frontend_presentation_snapshot': 'Presentation clock snapshot cases=7 PASS',

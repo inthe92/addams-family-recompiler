@@ -52,8 +52,10 @@ def validate_macos_deployment(app,minimum,arch):
 def copy_resources(destination,toolchain):
     shutil.copytree(ROOT/'assets/icons',destination/'assets/icons',
         ignore=shutil.ignore_patterns('*.rc.in'),dirs_exist_ok=True)
-    for relative in ['tools/recompiler','include','game/include','docs']:
+    for relative in ['tools/recompiler','tools/mods','examples/mods','include','game/include','docs']:
         shutil.copytree(ROOT/relative,destination/relative,ignore=shutil.ignore_patterns('__pycache__','*.pyc'),dirs_exist_ok=True)
+    with zipfile.ZipFile(destination/'examples/mods/Hello-NES-Native-Lab.zip','w',zipfile.ZIP_DEFLATED) as example:
+        for name in ('mod.json','main.lua'): example.write(ROOT/'examples/mods/hello'/name,name)
     for name in ['README.md','README.es.md','LICENSE','THIRD_PARTY.md']:
         shutil.copyfile(ROOT/name,destination/name)
     shutil.copytree(toolchain,destination/'toolchain',symlinks=True)

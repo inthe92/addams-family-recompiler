@@ -11,6 +11,7 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    'mod_frontend_contract', 'mod_lua_contract', 'mod_package_contract', 'mod_store_contract', 'mod_native_contract',
     'high_refresh_evidence_contract',
     'frontend_presentation_schedule', 'frontend_presentation_snapshot', 'frontend_presentation_native',
     'frontend_timing_metrics', 'frontend_timing_clock_contract', 'frontend_timing_source_contract', 'frontend_timing_native_contract',
@@ -34,8 +35,13 @@ REQUIRED = {
     'apu_status_irq_collision_reference', 'apu_frame_mode_delay_reference',
     'apu_frame_mode_edges_contract', 'apu_sdl_queue_contract',
 }
-DESKTOP_ONLY = {'frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
+DESKTOP_ONLY = {'mod_frontend_contract','frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    'mod_frontend_contract': r'Managed frontend cases=11 PASS',
+    'mod_lua_contract': r'Managed Lua cases=24 PASS',
+    'mod_package_contract': r'Ran 25 tests\b',
+    'mod_store_contract': r'Managed store cases=11 PASS',
+    'mod_native_contract': r'Managed native rates cases=3 PASS',
     'high_refresh_evidence_contract': r'Ran 7 tests\b',
     'frontend_presentation_schedule': r'Presentation clock schedule cases=12 PASS',
     'frontend_presentation_snapshot': r'Presentation clock snapshot cases=7 PASS',
