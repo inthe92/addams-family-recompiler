@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 using namespace nes::mods;
 static void require(bool ok,const char* m){if(!ok)throw std::runtime_error(m);}

@@ -44,3 +44,27 @@ Consolidation/build/push/native CI: pending execution in this report's initial
 revision. Final commands, SHAs, URLs, artifacts and results will be appended only
 after actual execution. Steam Deck/physical gamepad and owned-ROM manual sessions
 remain NOT RUN; no Rocket Boots, sprites, new physics or Scene API in this task.
+
+## First published verification — executed
+
+Consolidation cca5937c3ca267f439969bf062b3cc1aeff2432b; one whitespace-only
+cleanup cb96b2162798066b7f2d746edb662896b0fca36c was applied before first push.
+The160-path staged set and353-file export passed public checks;350reachable
+historical blobs had no private filename/credential candidates. Original159
+Completion02 SHA hashes remain intact. Core/ABI/A02/jump adapter bytes unchanged.
+
+Clean independent clone at cb96b2162798066b7f2d746edb662896b0fca36c built both
+Release configurations: desktop84/85, headless76/77, no skips, A02 only. Actual
+SDL/OpenGL57 checks PASS. Clean-clone ARM64 package extracted and passed strict
+ad-hoc signing, bundled Python/Zig/helper/mod/profile checks, synthetic ABI3
+compile/load(return42) and import process3scenarios. Not a physical gameplay test.
+
+Authorized push created feature/mod-manager-beta and triggered
+https://github.com/inthe92/addams-family-recompiler/actions/runs/38638249382
+on that exact SHA. ARM64 native CI produced its package with A02 as the sole
+CTest failure. Linux build exposed missing explicit <memory> in a synthetic SDK
+test. Windows build exposed an implicit path-to-string conversion in a synthetic
+resource-catalog fixture. Both are test compilation portability defects, not NES
+logic/A02/graphics defects. Corrections add <memory> and explicit UTF-8 conversion;
+no expectations or count guards are relaxed. Local focused tests pass; subsequent
+exact-SHA native CI is required before declaring them fixed on those platforms.
