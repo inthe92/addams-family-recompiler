@@ -1,0 +1,14 @@
+{
+  "schema": 2,
+  "profile_id": "addams-pal-inventory-text-v1",
+  "locale": "es-ES",
+  "texts": {
+    "inventory.heading": "NIÑOS"
+  },
+  "glyphs": {
+    "Ñ": {
+      "file": "assets/enye.chr",
+      "fallback": "N"
+    }
+  }
+}

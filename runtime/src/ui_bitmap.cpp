@@ -24,6 +24,12 @@ void words(Bitmap& b,int x,int y,std::string_view text,int scale=2){
 Bitmap panel(unsigned w,unsigned h){Bitmap b{w,h,std::vector<uint8_t>(w*h*4)};for(int y=0;y<int(h);++y)for(int x=0;x<int(w);++x){int cx=x<8?8:x>=int(w)-8?int(w)-9:x,cy=y<8?8:y>=int(h)-8?int(h)-9:y;if((x-cx)*(x-cx)+(y-cy)*(y-cy)<=64)pixel(b,x,y,12,16,24,224);}return b;}
 void button(Bitmap& b,Rect r,const char* label,bool selected){box(b,r,selected?120:48,255);box(b,{r.x+2,r.y+2,r.width-4,r.height-4},selected?46:24,255);words(b,r.x+(r.width-int(std::strlen(label))*12)/2,r.y+15,label);}
 }
+void paint_text(Bitmap&b,int x,int y,std::string_view text){words(b,x,y,text,1);}
+Bitmap text_overlay_bitmap(unsigned w,unsigned h,const std::vector<TextLine>& lines){
+ if(lines.empty())return {};
+ Bitmap b{w,h,std::vector<uint8_t>(std::size_t(w)*h*4)};
+ for(const auto& line:lines){box(b,{line.x-1,line.y-1,int(line.text.size())*6+1,9},12,208);words(b,line.x,line.y,line.text,1);}return b;
+}
 Bitmap overlay_bitmap(const FrontendUI& ui,double now){
  if(ui.modal()){auto b=panel(640,180);words(b,206,18,text::quit_title);words(b,86,54,text::quit_question);button(b,cancel_button(),text::cancel,!ui.exit_selected());button(b,exit_button(),text::exit_game,ui.exit_selected());return b;}
  if(!ui.banner_visible(now))return {};

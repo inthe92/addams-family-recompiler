@@ -59,6 +59,11 @@ private:
     unsigned pal_remainder_{};
     uint64_t total_dots_{}, frames_{}, data_writes_{};
     bool second_write_{}, nmi_line_{}, nmi_pending_{}, frame_ready_{};
+    uint64_t nametable_revision_{},composition_nametable_revision_=~uint64_t(0),composition_resource_revision_=~uint64_t(0);
+    unsigned composition_mirroring_=4;
+    std::array<bool,16> composition_matches_{};
+    std::array<uint16_t,16> composition_starts_{};
+    int composition_pixel(uint16_t name,uint16_t pattern,unsigned x,unsigned y);
     bool rendering() const noexcept { return (mask_ & 0x18u) != 0; }
     bool visible_or_prerender() const noexcept { return scanline_ < 240 || scanline_ == 311; }
     void update_nmi();

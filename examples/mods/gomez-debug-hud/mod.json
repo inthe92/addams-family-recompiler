@@ -1,0 +1,15 @@
+{
+  "id": "nes-native-lab.gomez-debug-hud",
+  "name": "Gomez Debug HUD",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Read-only completed-state player HUD. Verified initial-room coverage; unknown states are explicit.",
+  "author": "NES Native Lab",
+  "entry": "main.lua",
+  "permissions": ["observe.player", "overlay.text"],
+  "target": {
+    "game_id": "addams-family-pal-eu-enfrde",
+    "engine_min": "0.9.0",
+    "engine_max_exclusive": "0.10.0"
+  }
+}

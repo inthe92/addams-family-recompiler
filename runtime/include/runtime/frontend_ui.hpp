@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
+#include <string_view>
 namespace nes::ui {
 enum class Action { request_exit, cancel, confirm, previous, next, dismiss_help, focus_lost, focus_gained };
 class FrontendUI {
@@ -27,7 +28,10 @@ private:
     double started_at_{};
 };
 struct Rect { int x{},y{},width{},height{}; bool contains(int px,int py) const; };
+struct TextLine {int x{},y{};std::string text;};
 struct Bitmap { unsigned width{},height{}; std::vector<uint8_t> rgba; };
+void paint_text(Bitmap&,int,int,std::string_view);
+Bitmap text_overlay_bitmap(unsigned width,unsigned height,const std::vector<TextLine>& lines);
 Rect overlay_rect(int width,int height,bool modal);
 Rect cancel_button(); Rect exit_button();
 Bitmap overlay_bitmap(const FrontendUI& ui,double now);

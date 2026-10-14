@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "profile_id": "addams-pal-inventory-text-v1",
+  "locale": "es-ES",
+  "texts": {
+    "inventory.heading": "OBJETOS"
+  }
+}

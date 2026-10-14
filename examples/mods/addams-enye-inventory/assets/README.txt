@@ -1,0 +1,1 @@
+Experimental visual-only Spanish enye demonstration. Original authored 8x8 NES 2bpp tile, palette index 1 for readability under repository MIT license. Not a full translation. Requires Phase4B host. Install this ZIP in Mods, enable, open inventory. Disable restores original header on the next complete NES frame. No ROM, original tiles, code or cache included.

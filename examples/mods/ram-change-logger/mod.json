@@ -1,0 +1,18 @@
+{
+  "id": "sdk.ram-change-logger",
+  "name": "RAM Change Logger",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Generic read-only RAM snapshot change log.",
+  "author": "NES Native Lab",
+  "entry": "main.lua",
+  "permissions": [
+    "memory.read",
+    "memory.observe"
+  ],
+  "target": {
+    "game_id": "addams-family-pal-eu-enfrde",
+    "engine_min": "0.9.0",
+    "engine_max_exclusive": "0.10.0"
+  }
+}

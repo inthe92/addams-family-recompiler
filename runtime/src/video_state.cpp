@@ -1,4 +1,5 @@
 #include "runtime/video_state.hpp"
+#include <algorithm>
 
 namespace nes::runtime {
 uint8_t VideoState::palette_offset(uint16_t address) {
@@ -16,7 +17,7 @@ void VideoState::write_memory(uint16_t address, uint8_t value) {
     address = static_cast<uint16_t>(address & 0x3FFFu);
     // This cartridge contains read-only CHR. Native mods use separate assets.
     if (address < 0x2000) return;
-    if (address < 0x3F00) nametables_[cartridge_.nametable_offset(address)] = value;
+    if (address < 0x3F00) {nametables_[cartridge_.nametable_offset(address)] = value;++nametable_revision_;}
     else palette_[palette_offset(address)] = static_cast<uint8_t>(value & 0x3Fu);
 }
 void VideoState::update_nmi() {
@@ -104,6 +105,27 @@ void VideoState::select_sprites() {
         line_sprites_[line_sprite_count_++] = static_cast<uint8_t>(i);
     }
 }
+int VideoState::composition_pixel(uint16_t name,uint16_t pattern,unsigned x,unsigned y){
+    if(!cartridge_.has_compositions())return -1;
+    const unsigned mirroring=cartridge_.control()&3u;
+    const auto& resources=cartridge_.text_resources();
+    if(composition_nametable_revision_!=nametable_revision_||composition_resource_revision_!=cartridge_.text_resource_revision()||composition_mirroring_!=mirroring){
+        composition_matches_.fill(false);
+        for(unsigned i=0;i<resources.size();++i)if(resources[i].composition){const auto& c=*resources[i].composition;
+            const auto start=cartridge_.nametable_offset(uint16_t(c.nametable));composition_starts_[i]=start;
+            composition_matches_[i]=c.mirroring==mirroring&&std::equal(c.original_cells.begin(),c.original_cells.end(),nametables_.begin()+start);
+        }
+        composition_nametable_revision_=nametable_revision_;composition_resource_revision_=cartridge_.text_resource_revision();composition_mirroring_=mirroring;
+    }
+    const auto cell=cartridge_.nametable_offset(name);
+    const auto bank=cartridge_.chr_offset(pattern)/4096;
+    for(unsigned i=0;i<resources.size();++i)if(composition_matches_[i]){const auto& c=*resources[i].composition;const unsigned start=composition_starts_[i];
+        if(c.chr_bank==bank&&cell>=start&&cell-start<c.tiles.size()){
+            const auto& tile=c.tiles[cell-start];return ((tile[y]>>(7-x))&1u)|(((tile[y+8]>>(7-x))&1u)<<1);
+        }
+    }
+    return -1;
+}
 void VideoState::draw_pixel(unsigned x) {
     if (x == 0) {
         auto& line = drawing_lines_[scanline_];
@@ -128,6 +150,15 @@ void VideoState::draw_pixel(unsigned x) {
             const unsigned shift = ((tile_v >> 4) & 4u) | (tile_v & 2u);
             const uint8_t pal = static_cast<uint8_t>((read_memory(attr_address) >> shift) & 3u);
             color = palette_[pal * 4u + background_pixel];
+        }
+        // Display-only consumer. Original fetches/opacity remain the inputs to
+        // sprite selection/priority and sprite-zero. Never changes NES memory.
+        const int visual=composition_pixel(name_address,pattern,pixel_x&7u,(tile_v>>12)&7u);
+        if(visual>=0){
+            const uint16_t attr=static_cast<uint16_t>(0x23C0u|(tile_v&0x0C00u)|((tile_v>>4)&0x38u)|((tile_v>>2)&7u));
+            const unsigned shift=((tile_v>>4)&4u)|(tile_v&2u);
+            const auto pal=(nametables_[cartridge_.nametable_offset(attr)]>>shift)&3u;
+            color=visual?palette_[pal*4u+unsigned(visual)]:palette_[0];
         }
     }
     background_drawing_[scanline_ * width + x] = static_cast<uint8_t>(color & ((mask_ & 1u) ? 0x30u : 0x3Fu));

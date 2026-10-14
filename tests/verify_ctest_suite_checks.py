@@ -22,6 +22,35 @@ class GateChecks(unittest.TestCase):
                       for n in sorted(gate.REQUIRED)]
         # Authored report examples, independent of the verifier's regexes.
         self.outputs = {
+            "mod_package_eligibility_contract": "Ran 6 tests",
+            "mod_completion02_navigation": "Completion02 native checks=17 PASS",
+            "mod_completion02_store": "Completion02 native checks=36 PASS",
+            "mod_completion_navigation": "Completion native checks=29 PASS",
+            "mod_completion_store": "Completion native checks=43 PASS",
+            "gameplay_visual_contract": "Phase5 gameplay/UI/visual cases=39 PASS",
+            "gameplay_visual_store_contract": "Phase5 gameplay/UI/visual cases=51 PASS",
+            "gameplay_jump_contract": "Super jump synthetic cases=78 PASS",
+            "gameplay_visual_native_contract": "Phase5 native rates cases=5 PASS",
+            'text_composition_frontend_contract': 'Composition frontend checks=9 PASS',
+            'text_composition_native_contract': 'Composition native checks=117 PASS',
+            'text_composition_store_contract': 'Composition native checks=122 PASS',
+            'text_composition_package_contract': 'Ran 18 tests',
+            'chr_resource_research_contract': 'CHR research checks=14 PASS',
+            'chr_resource_package_research_contract': 'Ran 6 tests',
+            'mod_resource_multi_profile_contract': 'Ran 21 tests',
+            'mod_resource_multi_native_contract': 'Resource multi native checks=12 PASS',
+            'mod_resource_multi_store_contract': 'Resource multi native checks=20 PASS',
+            'mod_resource_profile_contract': 'Ran 33 tests',
+            'mod_resource_native_contract': 'Resource native checks=21 PASS',
+            'mod_resource_store_contract': 'Resource native checks=28 PASS',
+            'mod_resource_frontend_contract': 'Resource frontend checks=9 PASS',
+            'mod_sdk_ram_contract': 'SDK RAM checks=37 PASS',
+            'mod_sdk_store_contract': 'SDK RAM checks=43 PASS',
+            'mod_sdk_native_contract': 'SDK native rates cases=5 PASS',
+            'mod_v2_contract': 'Mod API v2 checks=41 PASS',
+            'mod_v2_store_contract': 'Mod API v2 checks=47 PASS',
+            'mod_v2_package_contract': 'Ran 6 tests',
+            'mod_v2_native_contract': 'Mod v2 native rates cases=5 PASS',
             'mod_frontend_contract': 'Managed frontend cases=11 PASS',
             'mod_lua_contract': 'Managed Lua cases=24 PASS',
             'mod_package_contract': 'Ran 25 tests',
@@ -114,7 +143,9 @@ class GateChecks(unittest.TestCase):
                     gate.check_inventory(self.inventory)
 
     def test_old_or_incomplete_execution_counts_are_rejected(self):
-        for name, bad in [('import_cache_abi_contract', 'Ran 4 tests'),
+        for name, bad in [('gameplay_jump_contract', 'Super jump synthetic cases=77 PASS'),
+                          ('gameplay_visual_native_contract', 'Phase5 native rates cases=4 PASS'),
+                          ('import_cache_abi_contract', 'Ran 4 tests'),
                           ('module_abi_contract', '3 real dynamic module ABI cases: PASS'),
                           ('cpu_irq_edge_adapters', 'IRQ edge controls executed=4 passed=4 failed=0'),
                           ('cpu_irq_poll_pal07', '[test output removed at 1024 bytes]')]:

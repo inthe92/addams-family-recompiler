@@ -1,4 +1,5 @@
 #pragma once
+#include "runtime/text_resources.hpp"
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -16,6 +17,10 @@ struct CartridgeData {
 class Cartridge {
 public:
     explicit Cartridge(CartridgeData data);
+    void set_text_resources(std::vector<PrgTextResource> resources);
+    const std::vector<PrgTextResource>& text_resources()const{return text_resources_;}
+    uint64_t text_resource_revision()const{return text_resource_revision_;}
+    bool has_compositions()const{return has_compositions_;}
     uint8_t cpu_read(uint16_t address, uint8_t open_bus = 0) const;
     // The bus notifies every CPU write so adjacent-cycle suppression is tracked.
     void cpu_write(uint16_t address, uint8_t value, uint64_t cycle);
@@ -32,6 +37,9 @@ public:
 
 private:
     CartridgeData data_;
+    std::vector<PrgTextResource> text_resources_;
+    uint64_t text_resource_revision_{};
+    bool has_compositions_{};
     std::array<uint8_t, 8192> prg_ram_{};
     uint8_t prg_mask_{};
     uint8_t chr_mask_{};

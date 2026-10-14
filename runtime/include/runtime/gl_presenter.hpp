@@ -20,6 +20,8 @@ public:
     void present(const uint8_t* indices, unsigned width, unsigned height);
     void present_overlay(const nes::ui::FrontendUI& ui, double monotonic_seconds);
     void present_panel(const nes::ui::Bitmap& bitmap,nes::ui::Rect rect);
+    void present_mod_plane(const nes::ui::Bitmap&,nes::ui::Rect,uint64_t revision,unsigned channel);
+    uint64_t mod_plane_uploads()const;
     void capture(const std::string& path);
     const char* version() const;
 private:

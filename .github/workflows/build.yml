@@ -47,6 +47,17 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Check eligibility for diagnostic packages
+        id: package_eligibility
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 -B tests/mod_package_eligibility.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml --output build/mod-package-eligibility.json
+      - name: Verify experimental Mod Manager with native OpenGL
+        id: manager_gl
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          python3 -B tools/mods/make_phase5_examples.py build/mod-manager-zips
+          python3 -B tools/mods/make_completion_example.py build/mod-manager-zips/Configurable-Jump-Example-v1.0.zip
+          build/mod_completion02_gl_checks "$RUNNER_TEMP/mod-manager-gl" build/mod-manager-zips > build/mod-manager-gl.log 2>&1
       - name: Collect high refresh evidence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         run: python3 -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics run --graphics-label macos-native-runner
@@ -58,14 +69,16 @@ jobs:
           path: |
             build/high-refresh-evidence.json
             build/high-refresh-gl.log
+            build/mod-manager-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
+            build/mod-package-eligibility.json
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
         id: toolchain
         # A02 remains a failing gate; independent package checks still run.
-        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' && steps.package_eligibility.outcome == 'success' && steps.manager_gl.outcome == 'success' }}
         run: |
           if [ "$(uname -m)" = "arm64" ]; then TARGET=macos-arm64; else TARGET=macos-x86_64; fi
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system "$TARGET"
@@ -104,7 +117,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
-          name: frontend-${{ matrix.os }}
+          name: mod-manager-beta-${{ matrix.os }}
           path: |
             dist/*.zip
             dist/*.zip.sha256
@@ -145,6 +158,10 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Check eligibility for diagnostic packages
+        id: package_eligibility
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python -B tests/mod_package_eligibility.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml --output build/mod-package-eligibility.json
       - name: Collect high refresh evidence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # Hosted Windows desktop/GL 3.2 capability has not been established.
@@ -159,14 +176,16 @@ jobs:
             build/native-build-info.json
             build/high-refresh-evidence.json
             build/high-refresh-gl.log
+            build/mod-manager-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
+            build/mod-package-eligibility.json
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
         id: toolchain
         # Keep A02 failed; independently verify the portable package.
-        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' && steps.package_eligibility.outcome == 'success' }}
         run: |
           python -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
       - name: Package portable frontend
@@ -193,7 +212,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
-          name: frontend-windows-x86_64
+          name: mod-manager-beta-windows-x86_64
           path: |
             dist/*.zip
             dist/*.zip.sha256
@@ -228,6 +247,17 @@ jobs:
       - name: Validate executed tests and JUnit
         if: always()
         run: python3 -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+      - name: Check eligibility for diagnostic packages
+        id: package_eligibility
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: python3 -B tests/mod_package_eligibility.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml --output build/mod-package-eligibility.json
+      - name: Verify experimental Mod Manager with Mesa/Xvfb OpenGL
+        id: manager_gl
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        run: |
+          python3 -B tools/mods/make_phase5_examples.py build/mod-manager-zips
+          python3 -B tools/mods/make_completion_example.py build/mod-manager-zips/Configurable-Jump-Example-v1.0.zip
+          xvfb-run -a env LIBGL_ALWAYS_SOFTWARE=1 build/mod_completion02_gl_checks "$RUNNER_TEMP/mod-manager-gl" build/mod-manager-zips > build/mod-manager-gl.log 2>&1
       - name: Collect high refresh evidence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # Native Linux process, Mesa software GL and virtual X display: no scanout.
@@ -240,13 +270,15 @@ jobs:
           path: |
             build/high-refresh-evidence.json
             build/high-refresh-gl.log
+            build/mod-manager-gl.log
             build/ctest-inventory.json
             build/ctest-results.xml
+            build/mod-package-eligibility.json
             build/Testing/Temporary/LastTest.log
           if-no-files-found: warn
       - name: Bundle verified local importer tools
         id: toolchain
-        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' && steps.package_eligibility.outcome == 'success' && steps.manager_gl.outcome == 'success' }}
         run: |
           python3 -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache /tmp/nes-runtime-cache --system linux-x86_64
           mkdir -p /tmp/nes-smoke/game
@@ -293,7 +325,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.package_checks.outcome == 'success' }}
         with:
-          name: frontend-linux-x86_64-AppImage
+          name: mod-manager-beta-linux-x86_64-AppImage
           path: |
             dist/*.AppImage
             dist/*.AppImage.sha256

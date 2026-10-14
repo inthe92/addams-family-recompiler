@@ -1,0 +1,7 @@
+# Canonical text keeps reviewed mod ZIPs and scripts identical across checkouts.
+* text=auto eol=lf
+*.png -text
+*.ico -text
+*.icns -text
+*.chr -text
+*.gz -text

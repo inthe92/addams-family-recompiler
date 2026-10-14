@@ -1,0 +1,21 @@
+{
+  "id": "translation.addams-spanish-multi",
+  "name": "Spanish Inventory and Life",
+  "version": "1.0.0",
+  "api_version": 2,
+  "description": "Two reviewed fixed glyph fields. Choose English and reload the relevant screens after toggling.",
+  "author": "NES Native Lab",
+  "entry": null,
+  "permissions": [
+    "resources.text"
+  ],
+  "target": {
+    "game_id": "addams-family-pal-eu-enfrde",
+    "engine_min": "0.9.0",
+    "engine_max_exclusive": "0.10.0"
+  },
+  "translation": {
+    "profile_id": "addams-pal-inventory-text-v1",
+    "file": "translations/es-ES.json"
+  }
+}

@@ -11,6 +11,17 @@ import sys
 import xml.etree.ElementTree as ET
 
 REQUIRED = {
+    "mod_package_eligibility_contract",
+    "mod_completion02_navigation", "mod_completion02_store",
+    "mod_completion_navigation", "mod_completion_store",
+    "gameplay_visual_native_contract", "gameplay_visual_contract", "gameplay_visual_store_contract", "gameplay_jump_contract",
+    'text_composition_frontend_contract',
+    'text_composition_native_contract', 'text_composition_store_contract', 'text_composition_package_contract',
+    'chr_resource_research_contract', 'chr_resource_package_research_contract',
+    'mod_resource_multi_profile_contract', 'mod_resource_multi_native_contract', 'mod_resource_multi_store_contract',
+    'mod_resource_profile_contract', 'mod_resource_native_contract', 'mod_resource_store_contract', 'mod_resource_frontend_contract',
+    'mod_sdk_ram_contract', 'mod_sdk_store_contract', 'mod_sdk_native_contract',
+    'mod_v2_contract', 'mod_v2_package_contract', 'mod_v2_store_contract', 'mod_v2_native_contract',
     'mod_frontend_contract', 'mod_lua_contract', 'mod_package_contract', 'mod_store_contract', 'mod_native_contract',
     'high_refresh_evidence_contract',
     'frontend_presentation_schedule', 'frontend_presentation_snapshot', 'frontend_presentation_native',
@@ -35,8 +46,37 @@ REQUIRED = {
     'apu_status_irq_collision_reference', 'apu_frame_mode_delay_reference',
     'apu_frame_mode_edges_contract', 'apu_sdl_queue_contract',
 }
-DESKTOP_ONLY = {'mod_frontend_contract','frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
+DESKTOP_ONLY = {'text_composition_frontend_contract','mod_resource_frontend_contract','mod_frontend_contract','frontend_sdl_events','frontend_audio_pause','module_abi_contract', 'apu_sdl_queue_contract', 'window_icon_contract'}
 OUTPUT = {
+    "mod_package_eligibility_contract": r"Ran 6 tests\b",
+    "mod_completion02_navigation": "Completion02 native checks=17 PASS",
+    "mod_completion02_store": "Completion02 native checks=36 PASS",
+    "mod_completion_navigation": "Completion native checks=29 PASS",
+    "mod_completion_store": "Completion native checks=43 PASS",
+    "gameplay_visual_contract": r"Phase5 gameplay/UI/visual cases=39 PASS",
+    "gameplay_visual_store_contract": r"Phase5 gameplay/UI/visual cases=51 PASS",
+    "gameplay_jump_contract": r"Super jump synthetic cases=78 PASS",
+    "gameplay_visual_native_contract": r"Phase5 native rates cases=5 PASS",
+    'text_composition_frontend_contract': 'Composition frontend checks=9 PASS',
+    'text_composition_native_contract': 'Composition native checks=117 PASS',
+    'text_composition_store_contract': 'Composition native checks=122 PASS',
+    'text_composition_package_contract': r'Ran 18 tests\b',
+    'chr_resource_research_contract': 'CHR research checks=14 PASS',
+    'chr_resource_package_research_contract': r'Ran 6 tests\b',
+    'mod_resource_multi_profile_contract': r'Ran 21 tests\b',
+    'mod_resource_multi_native_contract': 'Resource multi native checks=12 PASS',
+    'mod_resource_multi_store_contract': 'Resource multi native checks=20 PASS',
+    'mod_resource_frontend_contract': r'Resource frontend checks=9 PASS',
+    'mod_resource_profile_contract': r'Ran 33 tests\b',
+    'mod_resource_native_contract': r'Resource native checks=21 PASS',
+    'mod_resource_store_contract': r'Resource native checks=28 PASS',
+    'mod_sdk_ram_contract': r'SDK RAM checks=37 PASS',
+    'mod_sdk_store_contract': r'SDK RAM checks=43 PASS',
+    'mod_sdk_native_contract': r'SDK native rates cases=5 PASS',
+    'mod_v2_contract': r'Mod API v2 checks=41 PASS',
+    'mod_v2_store_contract': r'Mod API v2 checks=47 PASS',
+    'mod_v2_package_contract': r'Ran 6 tests\b',
+    'mod_v2_native_contract': r'Mod v2 native rates cases=5 PASS',
     'mod_frontend_contract': r'Managed frontend cases=11 PASS',
     'mod_lua_contract': r'Managed Lua cases=24 PASS',
     'mod_package_contract': r'Ran 25 tests\b',
@@ -109,7 +149,7 @@ def check_inventory(path, headless=False):
     print('CTest inventory: '+str(len(tests))+' registered tests; all '+str(len(required))+' required entries present, executable and mandatory.')
     return set(names)
 
-def check_results(path, names):
+def result_failures(path, names):
     root=ET.parse(path).getroot();cases=list(root.iter('testcase'))
     executed=[c.attrib['name'] for c in cases]
     require(len(executed)==len(set(executed)), 'Duplicate JUnit test cases')
@@ -130,6 +170,10 @@ def check_results(path, names):
         if name in OUTPUT:
             require(re.search(OUTPUT[name],output) is not None, 'Missing execution count/diagnostic: '+name)
     print(f'CTest results: {len(cases)} executed; {len(cases)-len(failed)} passed; {len(failed)} failed; zero skips.')
+    return failed
+
+def check_results(path,names):
+    failed=result_failures(path,names)
     require(not failed, 'Failed tests: '+', '.join(failed))
     print('CPU/IRQ/device/PPUSTATUS/ABI/importer counts confirmed.')
 

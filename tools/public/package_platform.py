@@ -9,6 +9,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import zipfile
 from icon_assets import verify_assets, verify_macos, verify_windows, verify_linux
@@ -17,7 +18,7 @@ from build_identity import prepared
 ROOT=Path(__file__).resolve().parents[2]
 
 def macos_deployment_target(build):
-    cache=(build/'CMakeCache.txt').read_text()
+    cache=(build/'CMakeCache.txt').read_text() if (build/'CMakeCache.txt').is_file() else ''
     match=re.search(r'^CMAKE_OSX_DEPLOYMENT_TARGET:[^=]+=(\d+\.\d+(?:\.\d+)?)\s*$',cache,re.MULTILINE)
     if not match:raise ValueError('Configure an explicit CMAKE_OSX_DEPLOYMENT_TARGET before packaging')
     return match.group(1)
@@ -56,6 +57,14 @@ def copy_resources(destination,toolchain):
         shutil.copytree(ROOT/relative,destination/relative,ignore=shutil.ignore_patterns('__pycache__','*.pyc'),dirs_exist_ok=True)
     with zipfile.ZipFile(destination/'examples/mods/Hello-NES-Native-Lab.zip','w',zipfile.ZIP_DEFLATED) as example:
         for name in ('mod.json','main.lua'): example.write(ROOT/'examples/mods/hello'/name,name)
+    subprocess.run([sys.executable,'-B',str(ROOT/'tools/mods/make_debug_hud.py'),
+        str(destination/'examples/mods/Gomez-Debug-HUD-v1.0.zip')],check=True)
+    subprocess.run([sys.executable,'-B',str(ROOT/'tools/mods/make_sdk_examples.py'),
+        str(destination/'examples/mods')],check=True)
+    subprocess.run([sys.executable,'-B',str(ROOT/'tools/mods/make_translation_examples.py'),
+        str(destination/'examples/mods')],check=True)
+    subprocess.run([sys.executable,'-B',str(ROOT/'tools/mods/make_phase5_examples.py'),str(destination/'examples/mods')],check=True)
+    subprocess.run([sys.executable,'-B',str(ROOT/'tools/mods/make_completion_example.py'),str(destination/'examples/mods/Configurable-Jump-Example-v1.0.zip')],check=True)
     for name in ['README.md','README.es.md','LICENSE','THIRD_PARTY.md']:
         shutil.copyfile(ROOT/name,destination/name)
     shutil.copytree(toolchain,destination/'toolchain',symlinks=True)
@@ -76,6 +85,10 @@ def package(build,output,toolchain,system=None,arch=None):
     expected={'Darwin':'macos','Windows':'windows','Linux':'linux'}[system]+'-'+arch
     if target!=expected:raise ValueError('Bundled runtime architecture mismatch')
     identity=prepared(build,system,arch)
+    # Experimental manager state is deliberately separate from the published beta.
+    cache=(build/'CMakeCache.txt').read_text() if (build/'CMakeCache.txt').is_file() else ''
+    store=re.search(r'^NES_MOD_STORE_NAME:STRING=([a-z0-9-]+)$',cache,re.MULTILINE)
+    component=dict(schema=1,component='Mod Manager Completion02',status='experimental-unpublished',default_mod_store=store.group(1) if store else 'explicit --mods-dir required',abi=identity['abi'],commit=identity['commit'],source_sha256=identity['source_sha256'])
     names={'Darwin':['NES Native Lab.app','NES-Native-Lab-macOS-'+arch+'.zip'],
            'Windows':['NES-Native-Lab-Windows-x86_64','NES-Native-Lab-Windows-x86_64.zip'],
            'Linux':['NES-Native-Lab.AppDir','NES-Native-Lab-Linux-'+arch+'.AppImage']}[system]
@@ -89,6 +102,7 @@ def package(build,output,toolchain,system=None,arch=None):
             subprocess.run(['/usr/bin/ditto','--norsrc','--noextattr','--noqtn','--noacl',str(build/'nes_native.app'),str(app)],check=True)
             copy_resources(app/'Contents/Resources',toolchain)
             (app/'Contents/Resources/PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
+            (app/'Contents/Resources/EXPERIMENTAL_MOD_MANAGER.json').write_text(json.dumps(component,sort_keys=True)+'\n')
             info=app/'Contents/Info.plist';data=plistlib.loads(info.read_bytes())
             data.update(CFBundleName='NES Native Lab',CFBundleDisplayName='NES Native Lab',NSHighResolutionCapable=True,
                 LSMinimumSystemVersion=minimum,CFBundleIconFile='nes-native-lab.icns')
@@ -118,6 +132,7 @@ def package(build,output,toolchain,system=None,arch=None):
         shutil.copyfile(build/'nes_native.exe',folder/'nes_native.exe')
         copy_resources(folder,toolchain)
         (folder/'PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
+        (folder/'EXPERIMENTAL_MOD_MANAGER.json').write_text(json.dumps(component,sort_keys=True)+'\n')
         shutil.copyfile(ROOT/'tools/public/WINDOWS_README.txt',folder/'WINDOWS_README.txt')
         verify_windows(folder)
         target=output/(folder.name+'.zip');make_archive(folder,target)
@@ -128,6 +143,7 @@ def package(build,output,toolchain,system=None,arch=None):
         (folder/'usr/bin/nes_native').chmod(0o755)
         copy_resources(folder/'usr/bin',toolchain)
         (folder/'usr/bin/PACKAGE_INFO.json').write_text(json.dumps(identity,sort_keys=True)+'\n')
+        (folder/'usr/bin/EXPERIMENTAL_MOD_MANAGER.json').write_text(json.dumps(component,sort_keys=True)+'\n')
         shutil.copyfile(ROOT/'assets/icons/nes-native-lab-256.png',folder/'nes-native-lab.png')
         shutil.copyfile(ROOT/'assets/icons/nes-native-lab-256.png',folder/'.DirIcon')
         for size in [16,32,48,64,128,256,512,1024]:

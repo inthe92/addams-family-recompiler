@@ -1,0 +1,12 @@
+{
+ "id":"nes-native-lab.configurable-jump","name":"Configurable Jump Example","version":"1.0.0","api_version":2,
+ "author":"NES Native Lab","description":"Declarative configuration for the existing bounded first-room jump and own UI.","entry":"main.lua",
+ "permissions":["gameplay.jump","ui.draw"],"target":{"game_id":"addams-family-pal-eu-enfrde","engine_min":"0.9.0","engine_max_exclusive":"0.10.0"},
+ "category":"Gameplay","conflicts":["phase5.super-gomez-gameplay"],
+ "settings":{
+  "extension":{"type":"integer","label":"Jump extension","default":6,"min":0,"max":12,"step":1},
+  "show":{"type":"boolean","label":"Show label","default":true},
+  "opacity":{"type":"float","label":"Panel opacity","default":0.7,"min":0.0,"max":1.0,"step":0.1},
+  "position":{"type":"enum","label":"Label position","default":"bottom","choices":["top","bottom"]}
+ }
+}

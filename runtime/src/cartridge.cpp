@@ -1,5 +1,6 @@
 #include "runtime/cartridge.hpp"
 #include <stdexcept>
+#include <algorithm>
 
 namespace nes::runtime {
 static bool power_of_two(std::size_t value) {
@@ -26,10 +27,47 @@ uint8_t Cartridge::bank_for_pc(uint16_t address) const noexcept {
     return static_cast<uint8_t>(bank & prg_mask_);
 }
 
+void Cartridge::set_text_resources(std::vector<PrgTextResource> resources){
+    if(resources.size()>16)throw std::invalid_argument("Too many text resources");
+    std::sort(resources.begin(),resources.end(),[](const auto&a,const auto&b){return a.bank*16384+a.offset<b.bank*16384+b.offset;});
+    unsigned end=0;bool first=true;
+    for(auto& r:resources){
+        if(r.owner.empty()||r.id.empty()||r.bank>=data_.prg_size/16384||r.offset>=16384||r.bytes.empty()||r.bytes.size()>64||r.offset+r.bytes.size()>16384)throw std::invalid_argument("Invalid bounded text resource");
+        const unsigned start=r.bank*16384+r.offset;
+        if(!first&&start<end)throw std::invalid_argument("Conflicting text resource owners");
+        if(resource_crc32(data_.prg+start,unsigned(r.bytes.size()))!=r.original_crc32)throw std::invalid_argument("Text resource does not match loaded game; translation rejected");
+        if(std::any_of(r.bytes.begin(),r.bytes.end(),[](uint8_t v){return v>127;}))throw std::invalid_argument("Text control byte in glyph replacement");
+        if(r.composition){
+            auto& c=*r.composition;
+            if(c.chr_bank>=data_.chr_size/4096||c.nametable<0x2000||c.nametable>=0x3000||
+               (c.nametable&0x3ff)>=960||((c.nametable&31)+r.bytes.size()>32)||c.mirroring>3||c.overrides.size()>8)
+                throw std::invalid_argument("Invalid bounded background consumer");
+            for(const auto& other:resources)if(&other!=&r&&other.composition){
+                const auto& o=*other.composition;
+                // Conservative row overlap across mirrored aliases; fail closed.
+                auto a=c.nametable&0x3ffu,b=o.nametable&0x3ffu;
+                if(c.chr_bank==o.chr_bank&&c.mirroring==o.mirroring&&a<b+other.bytes.size()&&b<a+r.bytes.size())
+                    throw std::invalid_argument("Conflicting background resource owners");
+            }
+            c.original_cells.assign(data_.prg+start,data_.prg+start+r.bytes.size());
+            c.tiles.clear();c.tiles.reserve(r.bytes.size());
+            for(auto code:r.bytes){std::array<uint8_t,16> tile{};
+                std::copy_n(data_.chr+c.chr_bank*4096+unsigned(code)*16,16,tile.begin());c.tiles.push_back(tile);}
+            std::array<bool,64> used{};
+            for(const auto& g:c.overrides){if(g.cell>=r.bytes.size()||used[g.cell])throw std::invalid_argument("Duplicate/out-of-range glyph cell");used[g.cell]=true;c.tiles[g.cell]=g.pixels;}
+        }
+        end=start+unsigned(r.bytes.size());first=false;
+    }
+    text_resources_=std::move(resources);
+    has_compositions_=std::any_of(text_resources_.begin(),text_resources_.end(),[](const auto&r){return bool(r.composition);});
+    ++text_resource_revision_;
+}
 uint8_t Cartridge::cpu_read(uint16_t address, uint8_t open_bus) const {
     if (address >= 0x8000) {
-        return data_.prg[static_cast<std::size_t>(bank_for_pc(address)) * 16384
-                         + (address & 0x3FFFu)];
+        const unsigned bank=bank_for_pc(address),offset=address&0x3FFFu;
+        if(!text_resources_.empty())for(const auto& r:text_resources_)
+            if(!r.composition&&r.bank==bank&&offset>=r.offset&&offset-r.offset<r.bytes.size())return r.bytes[offset-r.offset];
+        return data_.prg[std::size_t(bank)*16384+offset];
     }
     if (address >= 0x6000 && prg_ram_enabled()) return prg_ram_[address & 0x1FFFu];
     return open_bus;

@@ -30,3 +30,55 @@ Synthetic tests exercise traversal, reserved/duplicate paths, links, collisions,
 The callback deadline does not include filesystem log flushing or package operations. Heavy scripts/logging can add host latency; a bounded VM budget is not a guarantee of maintaining wall-clock PAL pacing under arbitrary mod load.
 
 Still pending: adversarial fuzzing, independent security review, simultaneous application instances using one store, live Windows/Linux filesystem behavior, physical Steam Deck controls and broader CPU/C-library time profiles. Do not infer complete safety or constant frame time from the unit tests. No scripts, logs, game content or user caches are uploaded in this task.
+
+## API v2 first vertical delivery
+
+Explicit observe.player/overlay.text permissions and engine/profile requirements
+are checked before install/enable and again at startup. No host writes exposed.
+HUD arguments require callback context, exact types, supported text and complete
+fit in a 256×40 strip; at most 8 commands × 40 characters per mod, 32 mods. Host
+lists/bitmap are bounded separately from Lua memory. Callback failure removes
+partial and stale lists. Rendering uses captured data and never executes Lua.
+No new executable/assets decoder, filesystem API or online distribution channel.
+This extends the same in-process restrictions, not the OS trust boundary.
+
+## Completion01 recovery and declarative state
+
+Metadata/configuration/profile operations are local, bounded and script-free.
+Eight options per mod, sixteen named profiles, state <=65,000 serialized bytes.
+Types/bounds/enum membership/unknown keys are validated before atomic replace;
+profile names are printable bounded labels, never filesystem paths. State remains
+in the existing state.json; old enabled/errors state is read without destructive
+migration. Original is built-in and cannot be renamed; --no-mods still bypasses
+managed storage/helpers entirely.
+
+An individually damaged installed manifest/entry now becomes a disabled error
+record; other intact mods remain manageable and the bad package can be uninstalled.
+Unsafe storage roots/identities and globally corrupt state still fail closed for
+manual review. Linked files are never loaded through this recovery path. Existing
+ZIP/path/sandbox limits remain unchanged. Profile validation and JSON persistence
+are transactional, but Lua activation follows commit: a script failure disables
+that owner/dependents and records errors, rather than claiming all VMs activated
+atomically. A previous altered jump trajectory is not reversed by a profile change.
+
+## Completion02 profile exchange and diagnostic packaging
+
+Portable profile JSON is limited to64KiB/32mods and strictly checked for duplicate
+keys, unknown fields, exact compatibility, setting types/ranges, dependencies and
+conflicts. Symlink/nonregular inputs are rejected. Inspection retains a SHA256
+which is rechecked at import, preventing an altered file from being accepted as
+the reviewed document. Names are case-insensitively unique; Original is immutable.
+Import never enables mods or executes Lua. Deleted profiles do not delete mods.
+
+Exports use a temporary file, fsync and an atomic no-overwrite hard-link publish;
+existing files are refused. A filesystem without hard links can reject export:
+export locally and copy the finished JSON. This does not establish crash durability
+on every filesystem, eliminate all OS-level races or provide an OS sandbox.
+Lua cannot access the selected host path. The existing JSON store remains the
+only manager persistence. Corrupt user state is reported, not silently erased.
+
+A separate diagnostic packaging gate permits only complete mandatory CTest/JUnit
+results with no omitted/skipped tests or unexpected failures. A02 remains ordinary
+FAIL and the strict suite gate still fails. Diagnostic eligibility is not suite
+PASS or release approval. Public source exports use the reviewed explicit file
+list and SHA/provenance records; production publication remains unauthorized.

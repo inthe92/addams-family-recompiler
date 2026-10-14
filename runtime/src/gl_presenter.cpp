@@ -42,6 +42,7 @@ struct GLPresenter::Impl {
     PFNGLDELETEBUFFERSPROC delete_buffers = gl_function<PFNGLDELETEBUFFERSPROC>("glDeleteBuffers");
     PFNGLVERTEXATTRIBPOINTERPROC vertex_pointer = gl_function<PFNGLVERTEXATTRIBPOINTERPROC>("glVertexAttribPointer");
     PFNGLENABLEVERTEXATTRIBARRAYPROC enable_attribute = gl_function<PFNGLENABLEVERTEXATTRIBARRAYPROC>("glEnableVertexAttribArray");
+    std::array<GLuint,2> mod_textures{};std::array<uint64_t,2> mod_revisions{};uint64_t mod_uploads{};
     OriginalRGBA rgba{};
     uint64_t cached_publication{};
     Impl(SDL_Window* w, nes::frontend::FrontendTiming* t) : window(w), timing(t) {}
@@ -52,6 +53,7 @@ struct GLPresenter::Impl {
         return result;
     }
     ~Impl() {
+        glDeleteTextures(2,mod_textures.data());
         if(ui_buffer)delete_buffers(1,&ui_buffer);if(ui_vao)delete_vaos(1,&ui_vao);if(ui_texture)glDeleteTextures(1,&ui_texture);
         if(buffer)delete_buffers(1,&buffer);if(vao)delete_vaos(1,&vao);
         if(texture)glDeleteTextures(1,&texture);if(program)delete_program(program);
@@ -145,6 +147,19 @@ void GLPresenter::present_panel(const nes::ui::Bitmap& bitmap,nes::ui::Rect r) {
     glViewport(old_viewport[0],old_viewport[1],old_viewport[2],old_viewport[3]);
     if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("OpenGL UI overlay failed");
 }
+void GLPresenter::present_mod_plane(const nes::ui::Bitmap&bitmap,nes::ui::Rect r,uint64_t revision,unsigned channel){
+    if(channel>=2)throw std::runtime_error("Invalid mod plane");auto&g=*impl_;auto&t=g.mod_textures[channel];
+    if(!bitmap.width){if(t)glDeleteTextures(1,&t);t=0;g.mod_revisions[channel]=0;return;}
+    if(bitmap.width!=320||bitmap.height!=240||bitmap.rgba.size()!=320*240*4)throw std::runtime_error("Invalid mod plane pixels");
+    if(!t){glGenTextures(1,&t);glBindTexture(GL_TEXTURE_2D,t);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_NEAREST);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);g.mod_revisions[channel]=~revision;}
+    int w=0,h=0;SDL_GL_GetDrawableSize(g.window,&w,&h);if(w<=0||h<=0||r.width<=0||r.height<=0)return;
+    const float left=2.0f*r.x/w-1,right=2.0f*(r.x+r.width)/w-1,top=1-2.0f*r.y/h,bottom=1-2.0f*(r.y+r.height)/h;
+    const float v[]={left,bottom,0,1,right,bottom,1,1,right,top,1,0,left,bottom,0,1,right,top,1,0,left,top,0,0};
+    GLint old[4];glGetIntegerv(GL_VIEWPORT,old);glViewport(0,0,w,h);g.use_program(g.program);g.bind_vao(g.ui_vao);g.bind_buffer(GL_ARRAY_BUFFER,g.ui_buffer);g.buffer_data(GL_ARRAY_BUFFER,sizeof v,v,GL_DYNAMIC_DRAW);
+    glBindTexture(GL_TEXTURE_2D,t);if(g.mod_revisions[channel]!=revision){glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,bitmap.width,bitmap.height,0,GL_RGBA,GL_UNSIGNED_BYTE,bitmap.rgba.data());g.mod_revisions[channel]=revision;++g.mod_uploads;}
+    glEnable(GL_BLEND);glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);glDrawArrays(GL_TRIANGLES,0,6);glDisable(GL_BLEND);if(g.timing)g.timing->record(nes::frontend::TimingCount::ui_draws);glViewport(old[0],old[1],old[2],old[3]);if(glGetError()!=GL_NO_ERROR)throw std::runtime_error("Mod plane composition failed");
+}
+uint64_t GLPresenter::mod_plane_uploads()const{return impl_->mod_uploads;}
 void GLPresenter::capture(const std::string& path) {
     int width=0,height=0;SDL_GL_GetDrawableSize(impl_->window,&width,&height);
     std::vector<uint8_t> pixels(static_cast<std::size_t>(width)*static_cast<unsigned>(height)*3);

@@ -41,3 +41,7 @@ end
 ```
 
 Unsupported: arbitrary `require`, bytecode, coroutines, pcall/xpcall, debug, metatable manipulation, string patterns/packing, dynamic libraries, active assets and player modifications. This is a deliberately small API/library subset, not unrestricted Lua.
+
+API v2 is a separately negotiated completed-state HUD extension; see
+[MOD_API_V2.md](MOD_API_V2.md). v1 callbacks/player availability remain unchanged.
+Its Addams `room_id` is the historical screen selector, not the v2 level ID.
