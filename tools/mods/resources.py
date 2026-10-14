@@ -121,4 +121,3 @@ def glyph_declarations(d,profile):
         if not isinstance(g['fallback'],str) or len(g['fallback'])!=1 or g['fallback'] not in profile['codec']['glyphs']:raise ValueError('Unapproved glyph fallback')
         files.add(g['file'])
     return declarations
-
