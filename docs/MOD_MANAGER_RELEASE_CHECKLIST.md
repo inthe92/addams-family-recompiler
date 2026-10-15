@@ -55,3 +55,15 @@ Only the experimental branch/Actions artifacts are authorized. No GitHub Release
 Use MOD_MANAGER_COMPLETION_03.md to distinguish newly executed clean-clone/CI
 results from Completion02 history. Preserve the checklist's physical gameplay
 and controller items as pending until actual hardware sessions are executed.
+
+
+## Completion03 limits for diagnostic artifacts
+
+The full CTest suite remains FAIL for A02 even when all package checks pass.
+Windows' separate hosted manager GL probe currently FAILS (`glCreateShader`
+unavailable); importer-only dialogs are not a normal main-menu boot. Linux manager
+GL passes, while its separate high-refresh pixel/orientation probe still FAILS.
+These are diagnostic artifacts, not a fully certified cross-platform beta.
+Follow the new Steam Deck desktop instructions in MOD_MANAGER_USER_GUIDE.md.
+Physical game/controller sessions, Windows normal GL boot, and Linux high-refresh
+validation remain mandatory before calling the manager release fully accepted.

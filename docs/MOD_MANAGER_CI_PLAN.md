@@ -105,3 +105,23 @@ a manager GL failure blocks packaging. Windows context remains unverified and
 NOT RUN. Existing high-refresh checks and Linux discrepancy remain visible.
 Experimental artifact labels start mod-manager-beta; exact package filenames
 are unchanged. See Completion03 for actual outcomes and final publication SHA.
+
+
+## Completion03 executed portability follow-up
+
+See MOD_MANAGER_COMPLETION_03.md for exact runs/commits and artifact hashes.
+Native Windows UTF-8 fixtures now use wide command-line conversion, authored ZIP
+creator metadata is fixed, and build Python3.11 is explicitly selected. Original
+hash/count/Unicode expectations remain unchanged. All four native CTest inventories
+at d0f9183 and the follow-up execute85 entries:84PASS/1FAIL A02/0omitted.
+
+Windows now also attempts the actual manager GL probe as a distinct ordinary
+failing step. `Missing OpenGL function: glCreateShader` is retained in its log;
+this is a BLOCKED hosted graphical validation, not a passing/not-executed test.
+The separate portable-payload/importer check uses `--import-only` for the native
+picker-cancel and invalid-input cases. CLI/importer success must not imply normal
+menu/game boot success. A diagnostic ZIP may be produced independently, just as
+Linux diagnostic packaging remains distinct from the known high-refresh GL FAIL.
+There is no continue-on-error and neither graphics failure is reclassified by the
+A02-only CTest eligibility gate. No additional NES/ABI/renderer changes are made.
+Physical Windows/Deck graphics and controllers still require manual evidence.

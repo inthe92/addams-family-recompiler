@@ -147,6 +147,7 @@ tests/text_composition_store_checks.py
 tests/utf8_test_args.hpp
 tests/verify_ctest_suite.py
 tests/verify_ctest_suite_checks.py
+tests/windows_package_checks.py
 tools/mods/images.py
 tools/mods/make_completion_example.py
 tools/mods/make_debug_hud.py

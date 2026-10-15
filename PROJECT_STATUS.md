@@ -129,3 +129,25 @@ Publication and four-platform CI are authorized for this branch only. See
 docs/MOD_MANAGER_COMPLETION_03.md for exact executed results; prior delivery
 numbers above remain historical, not certification of the new commit.
 No new gameplay mechanics, beta/main changes, tag or release are authorized.
+
+
+## Mod Manager Completion03 — native integration (2026-10-15)
+
+Published implementation: `feature/mod-manager-beta`,
+`10fbb1d8ad829d20f3872f47ced16a727002c126`.
+[Native Actions run](https://github.com/inthe92/addams-family-recompiler/actions/runs/38707087575).
+All four native builds and full CTest inventories executed:85 entries per platform,
+84PASS/1FAIL A02/0omitted. All four diagnostic payloads have matching version0.9.0,
+ABI3, clean commit and source fingerprint; downloaded hashes match native reports.
+Original four authored example ZIP hashes retained. No release/tag/main changes.
+
+**Not full cross-platform graphical certification:** Windows manager GL FAILS
+because glCreateShader is unavailable on the hosted environment; native portable
+importer/helper/ABI checks PASS, normal UI remains BLOCKED there. Linux manager GL
+57PASS under Mesa/Xvfb, but its separate historical high-refresh pixel probe FAILS.
+Both Macs manager GL57PASS; actual packaged main -> Mods -> Back -> main/close
+also observed locally on ARM64 without ROM. Real gameplay/physical controller/Deck
+acceptance remains NOT RUN in this integration. See
+[Completion03](docs/MOD_MANAGER_COMPLETION_03.md) for exact artifacts/hashes,
+source recovery, portability fixes and remaining acceptance. Later report-only
+commits do not change the embedded SHA of those explicitly identified packages.

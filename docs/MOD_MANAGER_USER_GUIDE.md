@@ -151,3 +151,49 @@ For gameplay open the normal application/main menu and choose Play. Back in
 --mods-only closes that diagnostic mode; during gameplay F2 opens Mods and Back
 returns to play. Super/Speedrun/Parallax can coexist; Configurable Jump replaces
 Super's exclusive owner. A02 remains a real failure, not all-suite PASS.
+
+
+## Completion03: Steam Deck OLED desktop test
+
+Hardware validation is pending. Download the Linux `mod-manager-beta` artifact
+from the exact implementation run in MOD_MANAGER_COMPLETION_03.md. Sign in to
+GitHub if Actions requires it. Unpack the Actions container; the actual payload
+is `NES-Native-Lab-Linux-x86_64.AppImage` with a `.sha256` sidecar. Its hash is not
+the hash of the outer Actions ZIP. Keep it in a new directory beside the existing
+beta, without replacing that beta or sharing its mod store.
+
+In Konsole, from that new directory:
+
+```sh
+sha256sum -c NES-Native-Lab-Linux-x86_64.AppImage.sha256
+chmod +x NES-Native-Lab-Linux-x86_64.AppImage
+./NES-Native-Lab-Linux-x86_64.AppImage --mods-dir "$PWD/experimental-mods" --import-cache "$PWD/private-import-cache"
+```
+
+If the runtime cannot mount via FUSE, use the same arguments with
+`--appimage-extract-and-run` immediately after the AppImage filename. This fallback
+and synthetic importer execution were exercised in CI; physical Deck/FUSE/gameplay
+were not. The frontend needs a working OpenGL3.2-capable driver.
+
+From the normal main menu choose Mods. Install the authored ZIPs in the package's
+`examples/mods` directory (inside the AppImage extraction: `usr/bin/examples/mods`).
+On Linux, drop a ZIP onto the installed-mods window when prompted. They start
+Disabled. Enable Super Gómez + Speedrun HUD + Mansion Parallax together. Use
+Configurable Jump as an alternative to Super, not simultaneously. Test Configure,
+Restore Defaults, Profiles/save/export/import/apply/Original, and Back to main.
+Choose Play and supply only your own compatible ROM; SHA validation is unchanged.
+During the game F2 opens Mods; Back resumes the game. Back in standalone
+`--mods-only` closes that diagnostic instance; it does not start a game.
+
+Check actual jump, timer, layer, audio/pause, F11/resize/4:3, focus, controller
+navigation, clean exit and restart. Record which physical checks passed. Native
+CI synthetic input and GL readback do not certify those physical checks. To gather
+startup output without commercial inputs, append `> startup.log 2>&1`; inspect any
+log before sharing it and never attach ROMs, imported modules or private caches.
+Linux's historical high-refresh GL pixel mismatch and A02 remain open.
+
+Windows diagnostic payload checks exercise native importer dialogs directly via
+`--import-only`. They do not certify the interactive main menu. The hosted Windows
+manager GL probe reports a missing `glCreateShader` entry point; normal graphical
+boot needs a separate check on a physical PC with a compatible driver. macOS has
+ad-hoc signatures and is not notarized; Windows is not Authenticode signed.
