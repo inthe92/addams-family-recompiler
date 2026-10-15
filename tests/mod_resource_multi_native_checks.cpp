@@ -1,3 +1,4 @@
+#include "utf8_test_args.hpp"
 #include "runtime/bus.hpp"
 #include "runtime/mod_manager.hpp"
 #include "multi_resource_fixture.hpp"
@@ -27,7 +28,7 @@ static Trace run(unsigned fields,bool disable=false){
  auto&pixels=bus.video().frame();out.pixels.insert(out.pixels.end(),pixels.begin(),pixels.end());}
  if(prg!=original)throw std::runtime_error("source PRG modified");return out;
 }
-int main(int argc,char**argv){try{
+int main(int argc,char**argv){try{nes::test::Utf8Args args(argc,argv);argc=args.size();argv=args.data();
  auto original=run(0),one=run(1),two=run(2),disabled=run(2,true);
  check(original.stable==one.stable,"one field alters unaffected native state");check(original.stable==two.stable,"two fields alter cycles/RAM/PCM/input/NMI/IRQ/OAM/DMC DMA");check(original.stable==disabled.stable,"disable alters unaffected native state");
  check(original.pixels!=one.pixels&&one.pixels!=two.pixels,"second field not independently rendered");

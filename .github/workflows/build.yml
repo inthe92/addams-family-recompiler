@@ -130,6 +130,10 @@ jobs:
         shell: msys2 {0}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        id: build_python
+        with:
+          python-version: '3.11'
       - uses: msys2/setup-msys2@v2
         with:
           msystem: UCRT64
@@ -141,32 +145,40 @@ jobs:
             mingw-w64-ucrt-x86_64-cmake
             mingw-w64-ucrt-x86_64-ninja
             mingw-w64-ucrt-x86_64-python
+      - name: Pin build Python and UTF-8 text I/O
+        run: |
+          echo "CI_PYTHON=${{ steps.build_python.outputs.python-path }}" >> "$GITHUB_ENV"
+          echo "PYTHONUTF8=1" >> "$GITHUB_ENV"
       - name: Audit source export
         id: source_audit
-        run: python -B tools/public/audit_public.py .
+        run: |
+          "$CI_PYTHON" -B tools/public/audit_public.py .
       - name: Build engine without ROM
         id: build
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=ON -DNES_ENABLE_DESKTOP=ON -DNES_ENABLE_MODS=ON -DPython3_EXECUTABLE="$CI_PYTHON"
           cmake --build build --parallel 4
-          python -B -c 'import json,os,sys; from pathlib import Path; sys.path.insert(0,"tools/public"); from build_identity import validate; data=json.loads(Path("build/native-build-info.json").read_text()); print(json.dumps(data,sort_keys=True)); validate(data,os.environ["GITHUB_SHA"])'
+          "$CI_PYTHON" -B -c 'import json,os,sys; from pathlib import Path; sys.path.insert(0,"tools/public"); from build_identity import validate; data=json.loads(Path("build/native-build-info.json").read_text()); print(json.dumps(data,sort_keys=True)); validate(data,os.environ["GITHUB_SHA"])'
           ctest --test-dir build --show-only=json-v1 > build/ctest-inventory.json
-          python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
+          "$CI_PYTHON" -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json
       - name: Run complete CTest suite
         run: |
           ctest --test-dir build --output-on-failure --verbose --no-tests=error --test-output-size-passed 65536 --test-output-size-failed 65536 --output-junit "$PWD/build/ctest-results.xml"
       - name: Validate executed tests and JUnit
         if: always()
-        run: python -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
+        run: |
+          "$CI_PYTHON" -B tests/verify_ctest_suite.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml
       - name: Check eligibility for diagnostic packages
         id: package_eligibility
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
-        run: python -B tests/mod_package_eligibility.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml --output build/mod-package-eligibility.json
+        run: |
+          "$CI_PYTHON" -B tests/mod_package_eligibility.py --inventory build/ctest-inventory.json --junit build/ctest-results.xml --output build/mod-package-eligibility.json
       - name: Collect high refresh evidence
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         # Hosted Windows desktop/GL 3.2 capability has not been established.
         # Native deterministic contracts run in CTest; physical GL remains manual.
-        run: python -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics not-executed --graphics-label windows-hosted-display-unverified
+        run: |
+          "$CI_PYTHON" -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics not-executed --graphics-label windows-hosted-display-unverified
       - name: Preserve test verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -174,6 +186,7 @@ jobs:
           name: ctest-windows-x64
           path: |
             build/native-build-info.json
+            build/examples/mods/*.zip
             build/high-refresh-evidence.json
             build/high-refresh-gl.log
             build/mod-manager-gl.log
@@ -187,19 +200,19 @@ jobs:
         # Keep A02 failed; independently verify the portable package.
         if: ${{ !cancelled() && steps.source_audit.outcome == 'success' && steps.build.outcome == 'success' && steps.package_eligibility.outcome == 'success' }}
         run: |
-          python -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
+          "$CI_PYTHON" -B tools/public/fetch_runtime_tools.py --destination runtime-tools --cache runtime-cache --system windows-x86_64
       - name: Package portable frontend
         id: package
         if: ${{ !cancelled() && steps.toolchain.outcome == 'success' }}
         run: |
           set -o pipefail
-          python -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools 2>&1 | tee build/windows-package.log
+          "$CI_PYTHON" -B tools/public/package_platform.py --build build --output dist --toolchain runtime-tools 2>&1 | tee build/windows-package.log
       - name: Verify extracted portable Windows package
         id: package_checks
         if: ${{ !cancelled() && steps.package.outcome == 'success' }}
         run: |
-          python -B tests/windows_package_checks.py --self-test
-          python -B tests/windows_package_checks.py --build build --output dist --report build/windows-package-verification.json --expected-commit "${{ github.sha }}"
+          "$CI_PYTHON" -B tests/windows_package_checks.py --self-test
+          "$CI_PYTHON" -B tests/windows_package_checks.py --build build --output dist --report build/windows-package-verification.json --expected-commit "${{ github.sha }}"
       - name: Preserve Windows package verification evidence
         if: always()
         uses: actions/upload-artifact@v4

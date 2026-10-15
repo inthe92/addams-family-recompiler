@@ -17,7 +17,7 @@ class Checks(unittest.TestCase):
             for name,data in extra:archive.writestr(name,data)
         return target
     def test_original_fixture_encoding(self):
-        root=base.ROOT/'examples/resources/chr-research';meta=json.loads((root/'own-enye-8x8.json').read_text());data=(root/'own-enye-8x8.chr').read_bytes()
+        root=base.ROOT/'examples/resources/chr-research';meta=json.loads((root/'own-enye-8x8.json').read_text(encoding='utf-8'));data=(root/'own-enye-8x8.chr').read_bytes()
         self.assertEqual((meta['character'],meta['width'],meta['height'],len(data)),('Ñ',8,8,16))
         for y in range(8):
             for x in range(8):self.assertEqual(((data[y]>>(7-x))&1)|(((data[y+8]>>(7-x))&1)<<1),meta['pixels'][y][x])

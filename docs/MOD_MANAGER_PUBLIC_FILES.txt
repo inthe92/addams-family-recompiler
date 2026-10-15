@@ -144,6 +144,7 @@ tests/text_composition_checks.cpp
 tests/text_composition_frontend_checks.cpp
 tests/text_composition_package_checks.py
 tests/text_composition_store_checks.py
+tests/utf8_test_args.hpp
 tests/verify_ctest_suite.py
 tests/verify_ctest_suite_checks.py
 tools/mods/images.py

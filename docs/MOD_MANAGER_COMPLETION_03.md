@@ -68,3 +68,32 @@ resource-catalog fixture. Both are test compilation portability defects, not NES
 logic/A02/graphics defects. Corrections add <memory> and explicit UTF-8 conversion;
 no expectations or count guards are relaxed. Local focused tests pass; subsequent
 exact-SHA native CI is required before declaring them fixed on those platforms.
+
+
+## Second native run and portability follow-up — 2026-10-15
+
+Run38639203100 on d9e2fcccde85c0cb48e514695d190ec74ad66d2c completed.
+Both Macs and Linux built, executed85 CTest entries (84PASS/1FAIL A02/0omitted),
+passed57 manager GL checks, and generated/verified diagnostic packages. Linux's
+separate historical high-refresh GL pixel/letterbox/orientation mismatch remains
+FAIL under Mesa/Xvfb; its existence is not erased by package eligibility.
+Windows built and executed85 entries:79PASS/6FAIL/0omitted. Besides A02, three
+Unicode-path fixtures, a locale-dependent own-glyph JSON read and the unchanged
+example-ZIP hash contract failed. Windows packaging was correctly blocked.
+
+The follow-up preserves all expectations and original four ZIPs. It normalizes
+Unicode command-line arguments in the three synthetic Win32 fixtures using the
+native wide command line, converts filesystem inputs explicitly from UTF-8,
+reads the authored glyph JSON explicitly as UTF-8, fixes ZIP creator metadata
+independently of host OS, and selects Python3.11 explicitly for Windows build/
+CTest/helpers (the failed run selected hosted Python3.14). ZIP byte identity must
+still be established by the unchanged hash assertions in native Windows CI;
+metadata alone is not claimed as the entire demonstrated cause. No runtime,
+A02, generated CPU or ABI production code changes are made by this follow-up.
+The new test-only UTF-8 header expands the reviewed cumulative allowlist to161
+paths. Ruby YAML parsing and local authored ZIP checks pass; all four hashes
+match the original packages. A subsequent native exact-SHA run is required.
+
+Local follow-up Release desktop build completed on macOS ARM64:85 executed,
+84PASS/1FAIL A02/0omitted; unchanged expectations, CTest exit8. Public source
+audit354files PASS, no private inputs. Original four example ZIP hashes match.

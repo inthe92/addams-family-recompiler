@@ -1,9 +1,10 @@
+#include "utf8_test_args.hpp"
 #include "runtime/mod_frontend.hpp"
 #include <array>
 #include <iostream>
 #include <stdexcept>
 static unsigned n{};static void check(bool b,const char*m){if(!b)throw std::runtime_error(m);++n;}
-int main(int argc,char**argv){try{if(argc!=7)throw std::invalid_argument("store/helper/catalog/two fixtures required");SDL_SetMainReady();SDL_setenv("SDL_VIDEODRIVER","dummy",1);if(SDL_Init(SDL_INIT_VIDEO))throw std::runtime_error(SDL_GetError());
+int main(int argc,char**argv){try{nes::test::Utf8Args args(argc,argv);argc=args.size();argv=args.data();if(argc!=7)throw std::invalid_argument("store/helper/catalog/two fixtures required");SDL_SetMainReady();SDL_setenv("SDL_VIDEODRIVER","dummy",1);if(SDL_Init(SDL_INIT_VIDEO))throw std::runtime_error(SDL_GetError());
  std::array<uint8_t,32768>p{};std::array<uint8_t,8192>c{};p[2048]=65;p[2049]=66;p[2050]=67;nes::runtime::Cartridge cartridge({p.data(),p.size(),c.data(),c.size()});
  nes::mods::Frontend f(false,argv[1],{"0.9.0","own-fixture",std::string(64,'a'),argv[4]});
  auto key=[&](SDL_Keycode k){f.begin_events();SDL_Event e{};e.type=SDL_KEYDOWN;e.key.keysym.sym=k;f.handle(e,960,720,960,720);e.type=SDL_KEYUP;f.handle(e,960,720,960,720);};

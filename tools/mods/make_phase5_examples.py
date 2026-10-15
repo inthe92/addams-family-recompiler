@@ -24,5 +24,5 @@ def build(output):
         if folder=='mansion-parallax-demo':files['assets/mansion.png']=mansion()
         with zipfile.ZipFile(output/name,'w') as z:
             for path,data in sorted(files.items()):
-                info=zipfile.ZipInfo(path,(2026,10,14,0,0,0));info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,data)
+                info=zipfile.ZipInfo(path,(2026,10,14,0,0,0));info.create_system=3;info.external_attr=0o100644<<16;info.compress_type=zipfile.ZIP_DEFLATED;z.writestr(info,data)
 if __name__=='__main__':build(sys.argv[1])
