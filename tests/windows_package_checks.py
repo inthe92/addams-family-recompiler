@@ -235,12 +235,13 @@ def package_processes(resources):
 
 def frontend_check(resources, directory, invalid=False):
     cache = directory / ('invalid import cache' if invalid else 'picker cache')
-    args = [str(resources / 'nes_native.exe'), '--no-god', '--import-cache', str(cache)]
+    # Test the native importer directly; the interactive menu has its own GL probe.
+    args = [str(resources / 'nes_native.exe'), '--import-only', '--no-god', '--import-cache', str(cache)]
     if invalid:
         profile = json.loads((resources / 'tools/recompiler/compatible_profile.json').read_text())
         fixture = directory / 'synthetic invalid image.bin'
         fixture.write_bytes(b'NES\x1a' + bytes(profile['rom_size'] - 4))
-        args.extend(['--import-only', '--rom', str(fixture)])
+        args.extend(['--rom', str(fixture)])
     process = subprocess.Popen(args, cwd=directory, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     observed = []
     try:
@@ -331,7 +332,8 @@ sys.exit(0 if result.wasSuccessful() else 1)
 
 
 def verify(build, output, report_path, expected_commit=None):
-    report = dict(host=platform.platform(), machine=platform.machine(), checks={}, status='FAIL')
+    report = dict(host=platform.platform(), machine=platform.machine(), checks={}, status='FAIL',
+                  scope='Portable payload, native importer dialogs and synthetic ABI; normal main-menu GL boot is verified separately, never implied by this result')
     try:
         if os.name != 'nt' or platform.machine().lower() not in ('amd64', 'x86_64'):
             raise ValueError('Requires native Windows x64; cross-compilation is not verification')

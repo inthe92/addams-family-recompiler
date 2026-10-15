@@ -179,6 +179,16 @@ jobs:
         # Native deterministic contracts run in CTest; physical GL remains manual.
         run: |
           "$CI_PYTHON" -B tests/high_refresh_report.py --build build --output build/high-refresh-evidence.json --expected-commit "${{ github.sha }}" --graphics not-executed --graphics-label windows-hosted-display-unverified
+      - name: Probe hosted Windows Mod Manager OpenGL
+        id: manager_gl
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        # A native failure stays red and is retained separately from importer tests.
+        # Diagnostic payloads are useful for testing on a physical graphics driver;
+        # they are not a certification that this hosted graphical probe passed.
+        run: |
+          "$CI_PYTHON" -B tools/mods/make_phase5_examples.py build/mod-manager-zips
+          "$CI_PYTHON" -B tools/mods/make_completion_example.py build/mod-manager-zips/Configurable-Jump-Example-v1.0.zip
+          build/mod_completion02_gl_checks.exe "$RUNNER_TEMP/mod-manager-gl" build/mod-manager-zips > build/mod-manager-gl.log 2>&1
       - name: Preserve test verification evidence
         if: always()
         uses: actions/upload-artifact@v4

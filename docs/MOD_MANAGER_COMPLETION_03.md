@@ -97,3 +97,33 @@ match the original packages. A subsequent native exact-SHA run is required.
 Local follow-up Release desktop build completed on macOS ARM64:85 executed,
 84PASS/1FAIL A02/0omitted; unchanged expectations, CTest exit8. Public source
 audit354files PASS, no private inputs. Original four example ZIP hashes match.
+
+
+## Third native run — d0f91831e7c0d8aaf7c832e845c513130bdce077
+
+https://github.com/inthe92/addams-family-recompiler/actions/runs/38705495907
+All four native builds and all85 CTest entries ran:84PASS/1FAIL A02/0omitted
+on each platform. The five Windows regressions are resolved with their original
+expectations, including original ZIP hashes. Manager GL57 checks pass on both
+Macs and Linux; Linux high-refresh GL still FAILS independently.
+
+Windows packaging reached actual extraction/dependency/Python/Zig/mod helper/
+synthetic ABI3/rejection of ABI2/cache checks successfully. Its old picker-cancel
+harness then tried a normal interactive launch, which now enters the new main
+menu; observed dialog was "Main menu unavailable", not the expected picker.
+This is NOT recorded as a successful normal boot. The graphics cause is not yet
+isolated: no claim that it is only missing driver capability is justified yet.
+The corrective harness selects the existing --import-only path for importer-only
+dialog checks, preserving their exact outcome/log/process-cleanup assertions.
+A separate actual Windows manager GL probe is added with an ordinary failing
+exit if anything fails, retained log and no continue-on-error. Its failure is
+never converted to a UI PASS or concealed by synthetic importer success.
+Diagnostic ZIP verification explicitly limits its scope; Windows graphical
+certification remains BLOCKED until the separate probe and physical testing pass.
+No production code is changed by this separation.
+
+The ARM64 Actions ZIP was also downloaded, CRC/hash checked, extracted under
+/private/tmp, strictly codesign verified, and its actual installed-mods interface
+visually observed without a ROM and with a fresh isolated store. Escape closed
+that --mods-only instance; no owned process remained. This is BOOT TESTED manager,
+not GAMEPLAY TESTED. Other physical platforms/controllers remain NOT RUN.
